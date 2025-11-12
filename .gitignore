@@ -30,6 +30,8 @@ ENV/
 # Environment Variables
 .env
 .env.local
+env.py
+/env.py
 
 # IDE
 .vscode/
@@ -71,5 +73,5 @@ alembic/versions/*.pyc
 # Temporary files
 tmp/
 temp/
-*.tmp
+*.tmp/
 

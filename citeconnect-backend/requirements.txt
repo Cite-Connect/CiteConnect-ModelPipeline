@@ -1,0 +1,4 @@
+
+# SQLAlchemy (for Alembic migrations)
+sqlalchemy==2.0.23
+
