@@ -33,6 +33,9 @@ from app.db.redis_client import get_redis_client, close_redis_client
 from app.db.weaviate_client import get_weaviate_client, close_weaviate_client, create_schema
 from app.db.neo4j_client import get_neo4j_driver, close_neo4j_driver
 
+# Import API routers
+from app.api.v1 import auth, users
+
 # Get settings
 settings = get_settings()
 
@@ -264,7 +267,7 @@ async def general_exception_handler(request: Request, exc: Exception):
         JSONResponse with generic error message
     """
     logger.exception(
-        f"Unexpected error: {str(exc)}",
+        f"Unexpected error: {str(e)}",
         extra={
             "path": request.url.path,
             "method": request.method
@@ -388,10 +391,19 @@ async def health_check():
     )
 
 
-# API routers will be added here later
-# from app.api.v1 import auth, users, papers, search, clusters, graph, interactions
-# app.include_router(auth.router, prefix=settings.API_V1_PREFIX, tags=["Authentication"])
-# ... etc
+# Register API routers
+app.include_router(
+    auth.router,
+    prefix=f"{settings.API_V1_PREFIX}/auth",
+    tags=["Authentication"]
+)
+
+app.include_router(
+    users.router,
+    prefix=f"{settings.API_V1_PREFIX}/users",
+    tags=["Users"]
+)
 
 
 logger.info("FastAPI application initialized successfully")
+logger.info(f"Registered routes: /auth/register, /auth/login, /auth/refresh, /users/me")
