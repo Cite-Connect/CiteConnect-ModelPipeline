@@ -9,8 +9,8 @@ echo "============================================================"
 echo ""
 
 # Load environment variables from .env
-if [ -f "../../.env" ]; then
-    export $(cat ../../.env | grep -v '^#' | xargs)
+if [ -f "../.env" ]; then
+    export $(cat ../.env | grep -v '^#' | xargs)
     echo "✓ Loaded configuration from .env"
 else
     echo "✗ .env file not found!"

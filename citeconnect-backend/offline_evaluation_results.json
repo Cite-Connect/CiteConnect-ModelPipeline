@@ -1,0 +1,55 @@
+{
+  "num_papers_evaluated": 3,
+  "avg_bibliography_size": 45.0,
+  "avg_precision_at_10": 0.0,
+  "avg_recall_at_10": 0.0,
+  "avg_mrr": 0.0,
+  "avg_hits": 0.0,
+  "all_results": [
+    {
+      "paper_id": "35df7522680c1ecad2c390c544d0f4d0f3da6ebc",
+      "precision_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "hits": 0,
+      "ground_truth_size": 50,
+      "recommendations": [
+        "0dbc5cfa73ed0801854584a770e8fe79f766b4e1",
+        "520a03e17c81e877a98da822613ba3c19460767e",
+        "ea13c994dd563c88f011b064ddf5e3cac12a2c61",
+        "c4be584d744d3b9a6aa569add21661bcb3a7d849",
+        "22dc2a13b77c221c52a4bff9c8561052cab7e1f8"
+      ]
+    },
+    {
+      "paper_id": "22dc2a13b77c221c52a4bff9c8561052cab7e1f8",
+      "precision_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "hits": 0,
+      "ground_truth_size": 46,
+      "recommendations": [
+        "520a03e17c81e877a98da822613ba3c19460767e",
+        "ea13c994dd563c88f011b064ddf5e3cac12a2c61",
+        "c4be584d744d3b9a6aa569add21661bcb3a7d849",
+        "0dbc5cfa73ed0801854584a770e8fe79f766b4e1",
+        "35df7522680c1ecad2c390c544d0f4d0f3da6ebc"
+      ]
+    },
+    {
+      "paper_id": "ea13c994dd563c88f011b064ddf5e3cac12a2c61",
+      "precision_at_k": 0.0,
+      "recall_at_k": 0.0,
+      "mrr": 0.0,
+      "hits": 0,
+      "ground_truth_size": 39,
+      "recommendations": [
+        "c4be584d744d3b9a6aa569add21661bcb3a7d849",
+        "520a03e17c81e877a98da822613ba3c19460767e",
+        "0dbc5cfa73ed0801854584a770e8fe79f766b4e1",
+        "22dc2a13b77c221c52a4bff9c8561052cab7e1f8",
+        "35df7522680c1ecad2c390c544d0f4d0f3da6ebc"
+      ]
+    }
+  ]
+}
