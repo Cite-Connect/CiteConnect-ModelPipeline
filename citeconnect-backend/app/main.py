@@ -1,253 +1,248 @@
-# app/main.py
-
 """
-CiteConnect FastAPI Application
-
-Main application entry point. Configures FastAPI app with:
-- CORS middleware
-- Logging middleware
-- Exception handlers
-- API routers
-- Database connection lifecycle
-- Health check endpoints
-
-Usage:
-    uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+CiteConnect Backend Application Entry Point.
+Initializes all services, loads models, and configures FastAPI.
 """
-
-import logging
 from contextlib import asynccontextmanager
-
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
+import time
 
-from app.core.config import get_settings
-from app.core.logging import setup_logging
-from app.core.exceptions import CiteConnectException
+from app.config import settings
+from app.utils.logger import setup_logging, get_logger
+from app.db.connection import db
+from app.db.repositories.embedding_repo import EmbeddingRepository
+from app.services.bootstrap.embedding_service import EmbeddingService
 
-# Import database clients
-from app.db.postgres import get_db_pool, close_db_pool
-from app.db.redis_client import get_redis_client, close_redis_client
-from app.db.weaviate_client import get_weaviate_client, close_weaviate_client, create_schema
-from app.db.neo4j_client import get_neo4j_driver, close_neo4j_driver
-
-# Import API routers
-from app.api.v1 import auth, users
-
-# Get settings
-settings = get_settings()
-
-# Setup logging
-setup_logging(
-    log_level=settings.LOG_LEVEL,
-    environment=settings.ENVIRONMENT,
-    log_file="logs/citeconnect.log" if not settings.DEBUG else None
-)
-
-# Initialize logger for this module
-logger = logging.getLogger(__name__)
+# Setup logging first
+setup_logging()
+logger = get_logger(__name__)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """
     Application lifespan manager.
-    
-    Handles startup and shutdown events:
-    - Startup: Initialize database connections, create schemas
-    - Shutdown: Close database connections gracefully
-    
-    Args:
-        app: FastAPI application instance
+    Handles startup and shutdown events.
     """
     # Startup
-    logger.info("=" * 60)
-    logger.info("CiteConnect Backend Starting Up")
-    logger.info("=" * 60)
-    
     logger.info(
-        "Application configuration loaded",
-        extra={
-            "environment": settings.ENVIRONMENT,
-            "debug": settings.DEBUG,
-            "log_level": settings.LOG_LEVEL
-        }
+        "Starting CiteConnect application",
+        version=settings.APP_VERSION,
+        environment=settings.ENVIRONMENT
     )
     
-    # Initialize database connections
     try:
-        logger.info("Initializing database connections...")
+        # Initialize database connection
+        logger.info("Initializing database connection")
+        await db.connect()
+        logger.info("Database connected successfully")
         
-        # PostgreSQL
-        logger.info("Connecting to PostgreSQL...")
-        try:
-            pool = await get_db_pool()
-            logger.info("PostgreSQL connection pool created successfully")
-        except Exception as e:
-            logger.warning(f"PostgreSQL connection failed: {str(e)}")
-            logger.warning("Application will start but database operations will fail")
+        # Perform health check
+        is_healthy = await db.health_check()
+        if not is_healthy:
+            logger.error("Database health check failed")
+            raise RuntimeError("Database not accessible")
         
-        # Redis
-        logger.info("Connecting to Redis...")
-        try:
-            redis = await get_redis_client()
-            logger.info("Redis client created successfully")
-        except Exception as e:
-            logger.warning(f"Redis connection failed: {str(e)}")
-            logger.warning("Caching will be disabled")
+        # Initialize repositories
+        logger.info("Initializing repositories")
+        from app.db.repositories.embedding_repo import EmbeddingRepository
+        from app.db.repositories.paper_repo import PaperRepository
+        from app.db.repositories.ground_truth_repo import GroundTruthRepository
+        from app.db.repositories.user_repo import UserRepository
+        from app.db.repositories.interaction_repo import InteractionRepository
         
-        # Weaviate
-        logger.info("Connecting to Weaviate...")
-        try:
-            weaviate = get_weaviate_client()
-            logger.info("Weaviate client created successfully")
-            
-            # Create schema if doesn't exist
-            logger.info("Ensuring Weaviate schema exists...")
-            create_schema()
-            logger.info("Weaviate schema ready")
-        except Exception as e:
-            logger.warning(f"Weaviate connection failed: {str(e)}")
-            logger.warning("Vector search will be unavailable")
+        embedding_repo = EmbeddingRepository(db)
+        paper_repo = PaperRepository(db)
+        ground_truth_repo = GroundTruthRepository(db)
+        user_repo = UserRepository(db)
+        interaction_repo = InteractionRepository(db)
         
-        # Neo4j
-        logger.info("Connecting to Neo4j...")
-        try:
-            driver = await get_neo4j_driver()
-            logger.info("Neo4j driver created successfully")
-        except Exception as e:
-            logger.warning(f"Neo4j connection failed: {str(e)}")
-            logger.warning("Citation graph features will be unavailable")
+        # Initialize bootstrap services
+        logger.info("Initializing bootstrap services")
+        from app.services.bootstrap.embedding_service import EmbeddingService
+        from app.services.bootstrap.ground_truth_service import GroundTruthService
         
-        logger.info("=" * 60)
-        logger.info("CiteConnect Backend Started Successfully")
-        logger.info("=" * 60)
+        embedding_service = EmbeddingService(embedding_repo)
+        await embedding_service.initialize()
+        
+        ground_truth_service = GroundTruthService(ground_truth_repo, paper_repo)
+        await ground_truth_service.initialize()
+        
+        # Initialize runtime services
+        logger.info("Initializing runtime services")
+        from app.services.runtime.user_state_service import UserStateService
+        from app.services.runtime.evaluation_service import EvaluationService
+        from app.services.runtime.recommendation_orchestrator import RecommendationOrchestrator
+        
+        user_state_service = UserStateService(user_repo, interaction_repo)
+        evaluation_service = EvaluationService(paper_repo, ground_truth_service)
+        
+        recommendation_orchestrator = RecommendationOrchestrator(
+            paper_repo=paper_repo,
+            embedding_repo=embedding_repo,
+            embedding_service=embedding_service,
+            ground_truth_service=ground_truth_service,
+            user_state_service=user_state_service
+        )
+        
+        # Store in app state for access in endpoints
+        app.state.db = db
+        app.state.embedding_repo = embedding_repo
+        app.state.paper_repo = paper_repo
+        app.state.ground_truth_repo = ground_truth_repo
+        app.state.user_repo = user_repo
+        app.state.interaction_repo = interaction_repo
+        app.state.embedding_service = embedding_service
+        app.state.ground_truth_service = ground_truth_service
+        app.state.user_state_service = user_state_service
+        app.state.evaluation_service = evaluation_service
+        app.state.recommendation_orchestrator = recommendation_orchestrator
+        
+        # Check model health
+        model_health = await embedding_service.health_check()
+        logger.info(
+            "Model health check complete",
+            results=model_health
+        )
+        
+        if not all(model_health.values()):
+            logger.warning(
+                "Some models failed health check",
+                failed=[ k for k, v in model_health.items() if not v]
+            )
+        
+        logger.info(
+            "Application startup complete",
+            models_loaded=list(embedding_service.models.keys())
+        )
+        
+        yield
         
     except Exception as e:
-        logger.error(f"Failed to initialize application: {str(e)}", exc_info=True)
+        logger.error(
+            "Application startup failed",
+            error=str(e),
+            exc_info=True
+        )
         raise
     
-    yield
-    
-    # Shutdown
-    logger.info("=" * 60)
-    logger.info("CiteConnect Backend Shutting Down")
-    logger.info("=" * 60)
-    
-    # Close database connections
-    try:
-        logger.info("Closing database connections...")
+    finally:
+        # Shutdown
+        logger.info("Shutting down application")
         
-        await close_db_pool()
-        logger.info("PostgreSQL connection pool closed")
+        try:
+            await db.disconnect()
+            logger.info("Database disconnected")
+        except Exception as e:
+            logger.error(
+                "Error during shutdown",
+                error=str(e),
+                exc_info=True
+            )
         
-        await close_redis_client()
-        logger.info("Redis client closed")
-        
-        close_weaviate_client()
-        logger.info("Weaviate client closed")
-        
-        await close_neo4j_driver()
-        logger.info("Neo4j driver closed")
-        
-        logger.info("All database connections closed successfully")
-        
-    except Exception as e:
-        logger.error(f"Error during shutdown: {str(e)}", exc_info=True)
-    
-    logger.info("=" * 60)
-    logger.info("CiteConnect Backend Shut Down")
-    logger.info("=" * 60)
+        logger.info("Application shutdown complete")
 
 
 # Create FastAPI application
 app = FastAPI(
     title=settings.APP_NAME,
-    description="Research paper recommendation system with semantic search and citation networks",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-    openapi_url="/openapi.json",
-    lifespan=lifespan
+    version=settings.APP_VERSION,
+    description="AI-powered academic paper recommendation system",
+    lifespan=lifespan,
+    docs_url="/docs" if settings.DEBUG else None,
+    redoc_url="/redoc" if settings.DEBUG else None,
 )
 
 
-# Configure CORS
+# CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.ALLOWED_ORIGINS,
+    allow_origins=settings.CORS_ORIGINS,
     allow_credentials=True,
-    allow_methods=settings.ALLOWED_METHODS,
-    allow_headers=settings.ALLOWED_HEADERS,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
-# Exception Handlers
-@app.exception_handler(CiteConnectException)
-async def citeconnect_exception_handler(request: Request, exc: CiteConnectException):
+# Request logging middleware
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
     """
-    Handle custom CiteConnect exceptions.
-    
-    Args:
-        request: FastAPI request object
-        exc: CiteConnectException instance
-    
-    Returns:
-        JSONResponse with error details
+    Log all incoming requests with timing.
     """
-    logger.error(
-        f"CiteConnect error: {exc.message}",
-        extra={
-            "status_code": exc.status_code,
-            "path": request.url.path,
-            "method": request.method,
-            "details": exc.details
-        }
+    request_id = str(time.time())
+    start_time = time.time()
+    
+    logger.info(
+        "Request received",
+        request_id=request_id,
+        method=request.method,
+        path=request.url.path,
+        client=request.client.host if request.client else "unknown"
     )
     
-    return JSONResponse(
-        status_code=exc.status_code,
-        content={
-            "error": {
-                "message": exc.message,
-                "type": exc.__class__.__name__,
-                "status_code": exc.status_code,
-                "details": exc.details
+    try:
+        response = await call_next(request)
+        
+        duration_ms = (time.time() - start_time) * 1000
+        
+        logger.info(
+            "Request completed",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            status_code=response.status_code,
+            duration_ms=round(duration_ms, 2)
+        )
+        
+        return response
+        
+    except Exception as e:
+        duration_ms = (time.time() - start_time) * 1000
+        
+        logger.error(
+            "Request failed",
+            request_id=request_id,
+            method=request.method,
+            path=request.url.path,
+            duration_ms=round(duration_ms, 2),
+            error=str(e),
+            exc_info=True
+        )
+        
+        return JSONResponse(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            content={
+                "error": {
+                    "code": "INTERNAL_SERVER_ERROR",
+                    "message": "An internal error occurred",
+                    "request_id": request_id
+                }
             }
-        }
-    )
+        )
 
 
+# Exception handlers
 @app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError):
-    """
-    Handle Pydantic validation errors.
-    
-    Args:
-        request: FastAPI request object
-        exc: RequestValidationError instance
-    
-    Returns:
-        JSONResponse with validation error details
-    """
+async def validation_exception_handler(
+    request: Request,
+    exc: RequestValidationError
+):
+    """Handle validation errors with detailed messages."""
     logger.warning(
-        f"Validation error: {str(exc)}",
-        extra={
-            "path": request.url.path,
-            "method": request.method,
-            "errors": exc.errors()
-        }
+        "Validation error",
+        path=request.url.path,
+        errors=exc.errors()
     )
     
     return JSONResponse(
         status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
         content={
             "error": {
-                "message": "Validation error",
-                "type": "ValidationError",
-                "status_code": 422,
+                "code": "VALIDATION_ERROR",
+                "message": "Invalid request parameters",
                 "details": exc.errors()
             }
         }
@@ -256,154 +251,132 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
 
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
-    """
-    Handle unexpected exceptions.
-    
-    Args:
-        request: FastAPI request object
-        exc: Exception instance
-    
-    Returns:
-        JSONResponse with generic error message
-    """
-    logger.exception(
-        f"Unexpected error: {str(e)}",
-        extra={
-            "path": request.url.path,
-            "method": request.method
-        }
+    """Handle unexpected errors gracefully."""
+    logger.error(
+        "Unhandled exception",
+        path=request.url.path,
+        error=str(exc),
+        exc_info=True
     )
     
     return JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "error": {
-                "message": "An unexpected error occurred",
-                "type": "InternalServerError",
-                "status_code": 500
+                "code": "INTERNAL_SERVER_ERROR",
+                "message": "An unexpected error occurred"
             }
         }
     )
 
 
-# Root endpoint
-@app.get("/", tags=["Root"])
-async def root():
-    """
-    Root endpoint.
-    
-    Returns basic API information.
-    """
-    logger.info("Root endpoint accessed")
-    
-    return {
-        "message": "Welcome to CiteConnect API",
-        "version": "1.0.0",
-        "docs": "/docs",
-        "health": "/api/v1/health"
-    }
-
-
 # Health check endpoint
-@app.get("/api/v1/health", tags=["Health"])
+@app.get("/health")
 async def health_check():
     """
-    Health check endpoint.
-    
-    Checks status of all database connections.
-    
-    Returns:
-        Health status of all services
+    Health check endpoint for monitoring.
+    Checks database and model availability.
     """
     logger.debug("Health check requested")
     
-    from app.db.postgres import check_db_health
-    from app.db.redis_client import check_redis_health
-    from app.db.weaviate_client import check_weaviate_health
-    from app.db.neo4j_client import check_neo4j_health
-    
     health_status = {
         "status": "healthy",
-        "timestamp": datetime.utcnow().isoformat(),
-        "services": {
-            "postgres": "unknown",
-            "redis": "unknown",
-            "weaviate": "unknown",
-            "neo4j": "unknown"
-        }
+        "version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT,
+        "checks": {}
     }
     
-    # Check PostgreSQL
     try:
-        postgres_healthy = await check_db_health()
-        health_status["services"]["postgres"] = "healthy" if postgres_healthy else "unhealthy"
-        if not postgres_healthy:
-            health_status["status"] = "degraded"
+        # Check database
+        db_healthy = await db.health_check()
+        health_status["checks"]["database"] = "healthy" if db_healthy else "unhealthy"
+        
+        # Check models if service is available
+        if hasattr(app.state, 'embedding_service'):
+            model_health = await app.state.embedding_service.health_check()  # Added await here
+            health_status["checks"]["models"] = {
+                model: "healthy" if healthy else "unhealthy"
+                for model, healthy in model_health.items()
+            }
+        else:
+            health_status["checks"]["models"] = "not_initialized"
+        
+        # Determine overall status
+        all_healthy = (
+            db_healthy and
+            (not hasattr(app.state, 'embedding_service') or 
+             all(model_health.values()))  # Fixed: now model_health is a dict, not a coroutine
+        )
+        
+        health_status["status"] = "healthy" if all_healthy else "degraded"
+        
+        logger.debug(
+            "Health check complete",
+            status=health_status["status"]
+        )
+        
+        return health_status
+        
     except Exception as e:
-        logger.error(f"PostgreSQL health check failed: {str(e)}")
-        health_status["services"]["postgres"] = "unhealthy"
-        health_status["status"] = "degraded"
-    
-    # Check Redis
-    try:
-        redis_healthy = await check_redis_health()
-        health_status["services"]["redis"] = "healthy" if redis_healthy else "unhealthy"
-        if not redis_healthy:
-            health_status["status"] = "degraded"
-    except Exception as e:
-        logger.error(f"Redis health check failed: {str(e)}")
-        health_status["services"]["redis"] = "unhealthy"
-        health_status["status"] = "degraded"
-    
-    # Check Weaviate
-    try:
-        weaviate_healthy = check_weaviate_health()
-        health_status["services"]["weaviate"] = "healthy" if weaviate_healthy else "unhealthy"
-        if not weaviate_healthy:
-            health_status["status"] = "degraded"
-    except Exception as e:
-        logger.error(f"Weaviate health check failed: {str(e)}")
-        health_status["services"]["weaviate"] = "unhealthy"
-        health_status["status"] = "degraded"
-    
-    # Check Neo4j
-    try:
-        neo4j_healthy = await check_neo4j_health()
-        health_status["services"]["neo4j"] = "healthy" if neo4j_healthy else "unhealthy"
-        if not neo4j_healthy:
-            health_status["status"] = "degraded"
-    except Exception as e:
-        logger.error(f"Neo4j health check failed: {str(e)}")
-        health_status["services"]["neo4j"] = "unhealthy"
-        health_status["status"] = "degraded"
-    
-    # Determine status code
-    status_code = status.HTTP_200_OK if health_status["status"] == "healthy" else status.HTTP_503_SERVICE_UNAVAILABLE
-    
-    logger.info(
-        f"Health check completed: {health_status['status']}",
-        extra=health_status["services"]
-    )
-    
-    return JSONResponse(
-        status_code=status_code,
-        content=health_status
-    )
+        logger.error(
+            "Health check failed",
+            error=str(e),
+            exc_info=True
+        )
+        
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "unhealthy",
+                "error": str(e)
+            }
+        )
 
 
-# Register API routers
+@app.get("/")
+async def root():
+    """Root endpoint with API information."""
+    return {
+        "name": settings.APP_NAME,
+        "version": settings.APP_VERSION,
+        "environment": settings.ENVIRONMENT,
+        "docs": "/docs" if settings.DEBUG else "disabled",
+        "health": "/health"
+    }
+
+
+# Import and include routers
+from app.api.v1 import recommendations, users, papers, interactions
+
 app.include_router(
-    auth.router,
-    prefix=f"{settings.API_V1_PREFIX}/auth",
-    tags=["Authentication"]
+    recommendations.router,
+    prefix=f"{settings.API_V1_PREFIX}/recommendations",
+    tags=["recommendations"]
 )
-
 app.include_router(
     users.router,
     prefix=f"{settings.API_V1_PREFIX}/users",
-    tags=["Users"]
+    tags=["users"]
+)
+app.include_router(
+    papers.router,
+    prefix=f"{settings.API_V1_PREFIX}/papers",
+    tags=["papers"]
+)
+app.include_router(
+    interactions.router,
+    prefix=f"{settings.API_V1_PREFIX}/interactions",
+    tags=["interactions"]
 )
 
 
-logger.info("FastAPI application initialized successfully")
-logger.info(f"Registered routes: /auth/register, /auth/login, /auth/refresh, /users/me")
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(
+        "app.main:app",
+        host="0.0.0.0",
+        port=8000,
+        reload=settings.DEBUG,
+        log_level=settings.LOG_LEVEL.lower()
+    )

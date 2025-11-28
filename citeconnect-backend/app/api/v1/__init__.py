@@ -1,12 +1,30 @@
+# =============================================================================
 # app/api/v1/__init__.py
+# =============================================================================
+"""API version 1 endpoints."""
+from fastapi import APIRouter
+from app.api.v1 import recommendations, users, papers, interactions
 
-"""
-API Version 1 Package
+router = APIRouter()
 
-This package contains all v1 API endpoint modules.
-"""
-
-# Import routers for easy access
-from app.api.v1 import auth, users
-
-__all__ = ["auth", "users"]
+# Include all v1 routers
+router.include_router(
+    recommendations.router,
+    prefix="/recommendations",
+    tags=["recommendations"]
+)
+router.include_router(
+    users.router,
+    prefix="/users",
+    tags=["users"]
+)
+router.include_router(
+    papers.router,
+    prefix="/papers",
+    tags=["papers"]
+)
+router.include_router(
+    interactions.router,
+    prefix="/interactions",
+    tags=["interactions"]
+)

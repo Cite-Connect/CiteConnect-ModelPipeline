@@ -1,0 +1,14 @@
+artifact_uri: file:///Users/sahilmohanty/Documents/MachineLearningOperationsProject-CiteConnect/CiteConnect-ModelPipeline/citeconnect-backend/mlruns/850648210534486403/ac571670b3af4cf89e3c0c27910de7c9/artifacts
+end_time: 1763444002321
+entry_point_name: ''
+experiment_id: '850648210534486403'
+lifecycle_stage: active
+run_id: ac571670b3af4cf89e3c0c27910de7c9
+run_name: specter2_baseline_20251118_003321
+source_name: ''
+source_type: 4
+source_version: ''
+start_time: 1763444002111
+status: 3
+tags: []
+user_id: sahilmohanty
