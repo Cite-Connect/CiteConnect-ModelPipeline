@@ -1,0 +1,552 @@
+# CiteConnect Backend - Complete Deployment Guide
+
+## Overview
+
+This guide provides step-by-step instructions for deploying the complete CiteConnect backend system.
+
+## Prerequisites Checklist
+
+- [ ] Docker 20.10+ installed
+- [ ] Docker Compose 2.0+ installed
+- [ ] Supabase account created
+- [ ] Supabase project created
+- [ ] 8GB RAM available
+- [ ] 20GB disk space available
+- [ ] Python 3.11+ (for local development)
+
+## Quick Start (5 Minutes)
+
+### 1. Clone and Configure
+
+```bash
+# Clone repository
+git clone <your-repo-url>
+cd citeconnect-backend
+
+# Copy environment template
+cp .env.example .env
+
+# Edit .env with your credentials
+nano .env
+```
+
+### 2. Required Environment Variables
+
+```env
+# Supabase (REQUIRED)
+SUPABASE_URL=https://xxxxx.supabase.co
+SUPABASE_KEY=your-anon-key
+DATABASE_URL=postgresql://postgres:password@db.xxxxx.supabase.co:5432/postgres
+
+# Security (REQUIRED - generate random 32+ char string)
+SECRET_KEY=$(openssl rand -hex 32)
+```
+
+### 3. Deploy
+
+```bash
+# Make setup script executable
+chmod +x setup.sh
+
+# Run setup (builds images, starts services, runs health checks)
+./setup.sh
+```
+
+### 4. Verify
+
+```bash
+# Check health
+curl http://localhost:8000/health
+
+# Expected output:
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "checks": {
+    "database": "healthy",
+    "models": {
+      "all-MiniLM-L6-v2": "healthy",
+      "specter2": "healthy"
+    }
+  }
+}
+```
+
+## Complete Setup (20 Minutes)
+
+### Step 1: Supabase Setup
+
+#### 1.1 Create Project
+
+1. Go to https://supabase.com/dashboard
+2. Click "New Project"
+3. Fill in:
+   - Name: `citeconnect`
+   - Database Password: (save this!)
+   - Region: (closest to you)
+4. Wait for provisioning (~2 minutes)
+
+#### 1.2 Get Credentials
+
+1. Go to Project Settings → API
+2. Copy:
+   - Project URL → `SUPABASE_URL`
+   - `anon` `public` key → `SUPABASE_KEY`
+3. Go to Project Settings → Database
+4. Copy Connection String (URI) → `DATABASE_URL`
+   - Format: `postgresql://postgres:[password]@db.[project].supabase.co:5432/postgres`
+   - Replace `[password]` with your database password
+
+#### 1.3 Enable pgvector Extension
+
+```sql
+-- Run in Supabase SQL Editor
+CREATE EXTENSION IF NOT EXISTS vector;
+```
+
+### Step 2: Initialize Database Schema
+
+The schema is already deployed in your Supabase instance (as mentioned in your notes). Verify tables exist:
+
+```sql
+-- Run in Supabase SQL Editor
+SELECT table_name 
+FROM information_schema.tables 
+WHERE table_schema = 'public'
+ORDER BY table_name;
+
+-- Should see tables like:
+-- papers, users, user_profiles_extended, 
+-- paper_embeddings_minilm, paper_embeddings_specter,
+-- ground_truth_papers, etc.
+```
+
+### Step 3: Configure Environment
+
+Create `.env` file with ALL required variables:
+
+```env
+# ============================================================================
+# Application Settings
+# ============================================================================
+APP_NAME=CiteConnect
+ENVIRONMENT=production
+DEBUG=false
+LOG_LEVEL=INFO
+
+# ============================================================================
+# Database - Supabase PostgreSQL
+# ============================================================================
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_KEY=your-anon-key-here
+DATABASE_URL=postgresql://postgres:password@db.your-project.supabase.co:5432/postgres
+
+# Database Pool Settings
+DB_POOL_SIZE=10
+DB_MAX_OVERFLOW=20
+DB_POOL_TIMEOUT=30
+
+# ============================================================================
+# Redis Cache
+# ============================================================================
+REDIS_HOST=redis
+REDIS_PORT=6379
+REDIS_DB=0
+REDIS_PASSWORD=
+CACHE_TTL_MULTIPLIER=1.0
+
+# ============================================================================
+# Security
+# ============================================================================
+SECRET_KEY=your-super-secret-key-min-32-characters-long
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+
+# ============================================================================
+# ML Models
+# ============================================================================
+EMBEDDING_MODEL_MINILM=sentence-transformers/all-MiniLM-L6-v2
+EMBEDDING_MODEL_SPECTER=allenai/specter2
+MODEL_CACHE_DIR=./models
+DEFAULT_EMBEDDING_MODEL=all-MiniLM-L6-v2
+EMBEDDING_BATCH_SIZE=32
+EMBEDDING_MAX_LENGTH=512
+
+# ============================================================================
+# MLflow
+# ============================================================================
+MLFLOW_TRACKING_URI=http://mlflow:5000
+MLFLOW_EXPERIMENT_NAME=citeconnect-recommendations
+
+# ============================================================================
+# Performance Thresholds
+# ============================================================================
+COLD_START_PROFILE_ALIGNMENT_THRESHOLD=0.6
+COLD_START_GROUND_TRUTH_THRESHOLD=0.5
+MATURE_PRECISION_AT_10_THRESHOLD=0.3
+MATURE_CTR_THRESHOLD=0.25
+BIAS_VARIANCE_THRESHOLD=0.2
+
+# ============================================================================
+# State Transition Thresholds
+# ============================================================================
+STATE_COLD_START_TO_EARLY_MIN_SAVES=2
+STATE_COLD_START_TO_EARLY_MIN_INTERACTIONS=5
+STATE_EARLY_TO_MATURE_MIN_SAVES=5
+STATE_EARLY_TO_MATURE_MIN_INTERACTIONS=15
+STATE_EARLY_TO_MATURE_MIN_DOMAINS=3
+STATE_EARLY_TO_MATURE_MIN_DAYS=7
+STATE_MATURE_TO_EXPERT_MIN_INTERACTIONS=50
+STATE_MATURE_TO_EXPERT_MIN_DAYS=30
+
+# ============================================================================
+# Cache TTLs (seconds)
+# ============================================================================
+CACHE_TTL_USER_EMBEDDING_COLD_START=86400
+CACHE_TTL_USER_EMBEDDING_EARLY=21600
+CACHE_TTL_USER_EMBEDDING_MATURE=3600
+CACHE_TTL_USER_EMBEDDING_EXPERT=1800
+CACHE_TTL_RECOMMENDATIONS_COLD_START=3600
+CACHE_TTL_RECOMMENDATIONS_EARLY=1800
+CACHE_TTL_RECOMMENDATIONS_MATURE=900
+CACHE_TTL_RECOMMENDATIONS_EXPERT=600
+CACHE_TTL_GROUND_TRUTH=604800
+CACHE_TTL_CANONICAL_PAPERS=86400
+
+# ============================================================================
+# Rate Limiting
+# ============================================================================
+RATE_LIMIT_RECOMMENDATIONS_PER_HOUR=100
+RATE_LIMIT_RECOMMENDATIONS_PER_MINUTE=20
+RATE_LIMIT_PROFILE_UPDATE_PER_HOUR=10
+
+# ============================================================================
+# Recommendation Settings
+# ============================================================================
+DEFAULT_RECOMMENDATION_COUNT=10
+MAX_RECOMMENDATION_COUNT=50
+MIN_GROUND_TRUTH_CITATIONS=10
+MAX_GROUND_TRUTH_CITATIONS=100
+MIN_REFERENCE_COVERAGE=0.3
+
+# ============================================================================
+# Celery Workers
+# ============================================================================
+CELERY_BROKER_URL=redis://redis:6379/1
+CELERY_RESULT_BACKEND=redis://redis:6379/2
+
+# ============================================================================
+# API Configuration
+# ============================================================================
+API_V1_PREFIX=/api/v1
+CORS_ORIGINS=["http://localhost:3000","http://localhost:8000"]
+```
+
+### Step 4: Build and Deploy
+
+```bash
+# Build all Docker images
+docker-compose build
+
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Check service status
+docker-compose ps
+```
+
+### Step 5: Initialize Ground Truth Data
+
+```bash
+# Run ground truth initialization
+docker-compose exec api python scripts/initialize_ground_truth.py
+
+# This will:
+# 1. Identify high-quality papers with citation data
+# 2. Compute citation relationships
+# 3. Create canonical paper lists per domain
+# Expected time: 5-10 minutes for 1000 papers
+```
+
+### Step 6: Generate Initial Embeddings (Optional)
+
+```bash
+# Generate embeddings for papers
+docker-compose exec api python scripts/generate_embeddings.py
+
+# Or trigger via Celery for background processing
+docker-compose exec worker celery -A workers.celery_app call \
+  workers.tasks.embeddings.batch_generate_paper_embeddings \
+  --args='[["paper1", "paper2", "paper3"], "all-MiniLM-L6-v2"]'
+```
+
+## Testing the API
+
+### 1. Register a User
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "test@example.com",
+    "password": "SecurePass123!",
+    "full_name": "Test User"
+  }'
+
+# Save the access_token from response
+```
+
+### 2. Create User Profile
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{
+    "research_stage": "phd",
+    "primary_domain": "machine_learning",
+    "interests": ["deep learning", "nlp", "computer vision"],
+    "reading_level": "advanced",
+    "research_goals": ["publish_paper", "learn_basics"]
+  }'
+```
+
+### 3. Get Recommendations
+
+```bash
+curl -X POST http://localhost:8000/api/v1/recommendations \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{
+    "user_id": 1,
+    "count": 10,
+    "model_preference": "all-MiniLM-L6-v2",
+    "session_id": "test-session-1"
+  }'
+```
+
+### 4. Track Interaction
+
+```bash
+curl -X POST http://localhost:8000/api/v1/interactions/1 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+  -d '{
+    "paper_id": "paper_abc123",
+    "interaction_type": "save",
+    "context": {
+      "source": "recommendation",
+      "position": 1,
+      "session_id": "test-session-1"
+    }
+  }'
+```
+
+## Monitoring & Logs
+
+### View Logs
+
+```bash
+# All services
+docker-compose logs -f
+
+# Specific service
+docker-compose logs -f api
+docker-compose logs -f worker
+docker-compose logs -f mlflow
+
+# Last 100 lines
+docker-compose logs --tail=100 api
+```
+
+### Monitor Services
+
+Access monitoring dashboards:
+
+- **API Docs**: http://localhost:8000/docs
+- **MLflow**: http://localhost:5000
+- **Flower (Celery)**: http://localhost:5555
+
+### Check Health
+
+```bash
+# API health
+curl http://localhost:8000/health
+
+# Database connectivity
+docker-compose exec api python -c "
+import asyncio
+from app.db.connection import db
+async def test():
+    await db.connect()
+    result = await db.health_check()
+    print(f'DB Healthy: {result}')
+    await db.disconnect()
+asyncio.run(test())
+"
+```
+
+## Troubleshooting
+
+### Issue: Models Not Loading
+
+**Symptoms**: API fails to start, error about model loading
+
+**Solution**:
+```bash
+# Check disk space
+df -h
+
+# Check memory
+free -h
+
+# Manually download models
+docker-compose exec api python -c "
+from sentence_transformers import SentenceTransformer
+SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
+SentenceTransformer('allenai/specter2')
+"
+```
+
+### Issue: Database Connection Failed
+
+**Symptoms**: "Database connection pool not initialized"
+
+**Solution**:
+```bash
+# Verify DATABASE_URL format
+echo $DATABASE_URL
+
+# Test connection
+psql "$DATABASE_URL" -c "SELECT 1"
+
+# Check Supabase project status
+# Visit: https://status.supabase.com
+```
+
+### Issue: Redis Connection Error
+
+**Symptoms**: "Redis connection refused"
+
+**Solution**:
+```bash
+# Check Redis is running
+docker-compose ps redis
+
+# Restart Redis
+docker-compose restart redis
+
+# Test Redis
+docker-compose exec redis redis-cli ping
+```
+
+### Issue: Slow Response Times
+
+**Symptoms**: Recommendations take >1 second
+
+**Solution**:
+```bash
+# Check if embeddings are cached
+docker-compose logs api | grep "embedding"
+
+# Check Redis cache hit rate
+docker-compose exec redis redis-cli
+> INFO stats
+
+# Increase worker count
+docker-compose up -d --scale worker=3
+```
+
+## Production Deployment
+
+### Security Checklist
+
+- [ ] Change `SECRET_KEY` to strong random value
+- [ ] Set `DEBUG=false`
+- [ ] Use strong database password
+- [ ] Enable SSL/TLS for database connection
+- [ ] Set up firewall rules
+- [ ] Enable rate limiting
+- [ ] Set up monitoring alerts
+
+### Performance Optimization
+
+```yaml
+# docker-compose.prod.yml
+services:
+  api:
+    deploy:
+      replicas: 3
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+  
+  worker:
+    deploy:
+      replicas: 5
+      resources:
+        limits:
+          cpus: '1'
+          memory: 2G
+```
+
+### Backup Strategy
+
+```bash
+# Backup database (via Supabase dashboard or CLI)
+# Supabase provides automatic daily backups
+
+# Backup models directory
+tar -czf models-backup-$(date +%Y%m%d).tar.gz models/
+
+# Backup logs
+tar -czf logs-backup-$(date +%Y%m%d).tar.gz logs/
+```
+
+## Maintenance
+
+### Daily Tasks
+
+- Monitor logs for errors
+- Check service health
+- Review recommendation metrics
+
+### Weekly Tasks
+
+- Update ground truth relationships (automatic via Celery)
+- Review bias detection reports
+- Backup important data
+
+### Monthly Tasks
+
+- Update models to latest versions
+- Review and optimize database queries
+- Analyze user engagement metrics
+
+## Getting Help
+
+- **Documentation**: See README.md and docs/ folder
+- **Logs**: Check `docker-compose logs`
+- **Issues**: GitHub Issues
+- **Email**: support@citeconnect.io
+
+## Next Steps
+
+After successful deployment:
+
+1. ✅ Import initial paper dataset
+2. ✅ Generate embeddings for all papers
+3. ✅ Run ground truth initialization
+4. ✅ Test all API endpoints
+5. ✅ Set up monitoring and alerts
+6. ✅ Configure backup strategy
+7. ✅ Deploy frontend application
+
+Your CiteConnect backend is now ready for production use!
