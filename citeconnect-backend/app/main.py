@@ -63,12 +63,16 @@ async def lifespan(app: FastAPI):
         logger.info("Initializing bootstrap services")
         from app.services.bootstrap.embedding_service import EmbeddingService
         from app.services.bootstrap.ground_truth_service import GroundTruthService
+        from app.services.bootstrap.experiment_service import ExperimentService
         
         embedding_service = EmbeddingService(embedding_repo)
         await embedding_service.initialize()
         
         ground_truth_service = GroundTruthService(ground_truth_repo, paper_repo)
         await ground_truth_service.initialize()
+        
+        experiment_service = ExperimentService(db)
+        await experiment_service.initialize()
         
         # Initialize runtime services
         logger.info("Initializing runtime services")
@@ -84,7 +88,8 @@ async def lifespan(app: FastAPI):
             embedding_repo=embedding_repo,
             embedding_service=embedding_service,
             ground_truth_service=ground_truth_service,
-            user_state_service=user_state_service
+            user_state_service=user_state_service,
+            experiment_service=experiment_service  # Added experiment service
         )
         
         # Store in app state for access in endpoints
@@ -98,6 +103,7 @@ async def lifespan(app: FastAPI):
         app.state.ground_truth_service = ground_truth_service
         app.state.user_state_service = user_state_service
         app.state.evaluation_service = evaluation_service
+        app.state.experiment_service = experiment_service  # Added to state
         app.state.recommendation_orchestrator = recommendation_orchestrator
         
         # Check model health

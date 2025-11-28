@@ -12,6 +12,7 @@ from app.db.repositories.embedding_repo import EmbeddingRepository
 from app.services.bootstrap.embedding_service import EmbeddingService
 from app.services.bootstrap.ground_truth_service import GroundTruthService
 from app.services.runtime.user_state_service import UserStateService
+from app.services.bootstrap.experiment_service import ExperimentService
 
 logger = get_logger(__name__)
 
@@ -63,7 +64,8 @@ class RecommendationOrchestrator:
         embedding_repo: EmbeddingRepository,
         embedding_service: EmbeddingService,
         ground_truth_service: GroundTruthService,
-        user_state_service: UserStateService
+        user_state_service: UserStateService,
+        experiment_service: ExperimentService
     ):
         """
         Initialize recommendation orchestrator.
@@ -74,12 +76,14 @@ class RecommendationOrchestrator:
             embedding_service: Embedding service
             ground_truth_service: Ground truth service
             user_state_service: User state service
+            experiment_service: Experiment tracking service (optional)
         """
         self.paper_repo = paper_repo
         self.embedding_repo = embedding_repo
         self.embedding_service = embedding_service
         self.ground_truth_service = ground_truth_service
         self.user_state_service = user_state_service
+        self.experiment_service = experiment_service
         
         logger.info("RecommendationOrchestrator initialized")
     
@@ -201,12 +205,45 @@ class RecommendationOrchestrator:
                 )
             }
             
+            # Log to MLflow and database (if experiment service available)
+            if self.experiment_service:
+                try:
+                    event_id = await self.experiment_service.log_recommendation_event(
+                        user_id=user_id,
+                        model_name=model_name,
+                        recommendations=recommendations[:count],
+                        evaluation_scores=evaluation,
+                        user_context=user_context,
+                        generation_time_ms=generation_time_ms
+                    )
+                    
+                    # Also log cold-start evaluation if applicable
+                    if user_stage == 'cold_start' and evaluation.get('profile_alignment'):
+                        await self.experiment_service.log_cold_start_evaluation(
+                            user_id=user_id,
+                            model_name=model_name,
+                            profile_alignment=evaluation['profile_alignment'],
+                            ground_truth_quality=evaluation['ground_truth_quality'],
+                            recommendation_count=len(recommendations[:count])
+                        )
+                    
+                    logger.debug(
+                        "Recommendation event logged",
+                        event_id=event_id
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Experiment logging failed, continuing",
+                        error=str(e)
+                    )
+            
             logger.info(
                 "Recommendations generated successfully",
                 user_id=user_id,
                 count=len(recommendations),
                 strategy=strategy_used,
-                time_ms=round(generation_time_ms, 2)
+                time_ms=round(generation_time_ms, 2),
+                logged_to_mlflow=self.experiment_service is not None
             )
             
             return response
