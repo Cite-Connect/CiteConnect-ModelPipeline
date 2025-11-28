@@ -89,9 +89,10 @@ async def identify_ground_truth_papers():
             if reference_coverage >= settings.MIN_REFERENCE_COVERAGE:
                 # Calculate quality score
                 # Based on: citations, recency, coverage
+                # Note: reference_coverage will be auto-calculated by database
                 citation_score = min(candidate['citation_count'] / 1000, 1.0)
                 recency_score = max(0, (candidate['year'] - 2000) / 24) if candidate['year'] else 0.5
-                coverage_score = reference_coverage
+                coverage_score = reference_coverage  # Used for quality calc only
                 
                 quality_score = (
                     citation_score * 0.4 +
@@ -100,10 +101,12 @@ async def identify_ground_truth_papers():
                 )
                 
                 # Create ground truth paper
+                # Pass reference_coverage for quality calculation, but it won't be inserted
+                # Database will auto-calculate it from reference_count and references_in_corpus
                 await gt_repo.create_ground_truth_paper(
                     paper_id=paper_id,
                     num_references=len(references),
-                    reference_coverage=reference_coverage,
+                    reference_coverage=reference_coverage,  # Used internally, not inserted
                     quality_score=quality_score
                 )
                 
