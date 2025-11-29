@@ -45,13 +45,12 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = None
     CACHE_TTL_MULTIPLIER: float = 1.0
     
-    # ML Models
+    # Embedding Models
     EMBEDDING_MODEL_MINILM: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_MODEL_SPECTER: str = "allenai/specter2_base"
-    MODEL_CACHE_DIR: str = "./models"
-    DEFAULT_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
+    EMBEDDING_MODEL_SPECTER: str = "allenai/specter"
     EMBEDDING_BATCH_SIZE: int = 32
     EMBEDDING_MAX_LENGTH: int = 512
+    MODEL_CACHE_DIR: str = "./models"
     
     # MLflow
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"

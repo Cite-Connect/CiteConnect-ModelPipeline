@@ -257,13 +257,13 @@ async def validate_embeddings():
     # Check MiniLM dimension
     if minilm_count > 0:
         sample_minilm = await db.fetchval("""
-            SELECT embedding 
+            SELECT vector_dims(embedding) 
             FROM paper_embeddings_minilm 
             LIMIT 1
         """)
         
         if sample_minilm:
-            minilm_dim = len(sample_minilm)
+            minilm_dim = sample_minilm
             if minilm_dim != 384:
                 print(f"   ❌ Wrong dimension ({minilm_dim}, expected 384)")
                 minilm_ok = False
@@ -292,13 +292,13 @@ async def validate_embeddings():
     # Check SPECTER dimension
     if specter_count > 0:
         sample_specter = await db.fetchval("""
-            SELECT embedding 
+            SELECT vector_dims(embedding)
             FROM paper_embeddings_specter 
             LIMIT 1
         """)
         
         if sample_specter:
-            specter_dim = len(sample_specter)
+            specter_dim = sample_specter
             if specter_dim != 768:
                 print(f"   ⚠️  Wrong dimension ({specter_dim}, expected 768)")
             else:

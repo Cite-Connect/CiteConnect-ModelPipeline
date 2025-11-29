@@ -18,6 +18,9 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - SECRET_KEY=${SECRET_KEY}
     volumes:
+      - .:/app
+      - ./scripts:/app/scripts
+      - ./services:/app/services
       - ./models:/app/models
       - ./logs:/app/logs
     depends_on:
@@ -50,7 +53,7 @@ services:
   mlflow:
     image: python:3.11-slim
     ports:
-      - "5000:5000"
+      - "5001:5000"
     volumes:
       - mlflow_data:/mlflow
     command: >

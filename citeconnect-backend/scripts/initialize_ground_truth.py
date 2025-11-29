@@ -281,14 +281,13 @@ async def identify_canonical_papers():
                 insert_query = """
                     INSERT INTO domain_canonical_papers (
                         domain, recommendation_tier, paper_ids, 
-                        avg_quality_score, paper_count
+                        avg_quality_score
                     )
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (domain, recommendation_tier)
                     DO UPDATE SET
                         paper_ids = EXCLUDED.paper_ids,
                         avg_quality_score = EXCLUDED.avg_quality_score,
-                        paper_count = EXCLUDED.paper_count,
                         updated_at = NOW()
                 """
                 
