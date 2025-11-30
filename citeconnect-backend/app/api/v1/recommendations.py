@@ -47,7 +47,7 @@ def get_recommendation_orchestrator(request: Request) -> RecommendationOrchestra
     
     Features:
     - **Cold-start support**: Works from day one using user profile
-    - **Multi-model**: Compare all-MiniLM-L6-v2 vs SPECTER2
+    - **Multi-model**: Compare all-MiniLM-L6-v2 vs SPECTER
     - **Fallback strategies**: Guaranteed recommendations even with failures
     - **Quality evaluation**: Real-time metrics on recommendation quality
     - **Diversity**: Ensures variety in authors, venues, and topics
