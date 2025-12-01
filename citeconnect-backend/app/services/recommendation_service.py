@@ -7,6 +7,8 @@ from typing import List, Dict, Optional, Tuple, Any
 import numpy as np
 import random
 from datetime import datetime, timedelta
+from pathlib import Path
+import json
 
 from app.db.connection import DatabaseConnection
 from app.db.repositories.user_repo import UserRepository
@@ -27,6 +29,7 @@ class RecommendationService:
     - Warm-start recommendations (interaction-based)
     - Multi-factor scoring
     - Ground truth validation
+    - Bias mitigation via configurable slice rules
     """
     
     # Default scoring weights (tunable hyperparameters)
@@ -65,9 +68,114 @@ class RecommendationService:
         self.paper_repo = PaperRepository(db)
         self.gt_repo = GroundTruthRepository(db)
         self.user_embedding_service = UserEmbeddingService(db)
+
+        # Load bias mitigation configuration (if present)
+        self.bias_config = self._load_bias_config()
         
         logger.info("RecommendationService initialized")
-    
+
+    # -------------------------------------------------------------------------
+    # Bias mitigation config helpers
+    # -------------------------------------------------------------------------
+
+    def _load_bias_config(self) -> Dict:
+        """
+        Load bias mitigation config from JSON, if present.
+
+        Expected path (from backend root):
+        citeconnect-backend/bias_config/bias_mitigation_config.json
+        """
+        try:
+            config_path = (
+                Path(__file__).parent.parent.parent
+                / "bias_config"
+                / "bias_mitigation_config.json"
+            )
+            if not config_path.exists():
+                logger.info(
+                    "No bias mitigation config found – running without mitigation",
+                    path=str(config_path),
+                )
+                return {}
+            with config_path.open("r") as f:
+                cfg = json.load(f)
+            logger.info(
+                "Loaded bias mitigation config",
+                path=str(config_path),
+            )
+            return cfg
+        except Exception as e:
+            logger.warning(f"Failed to load bias mitigation config: {e}")
+            return {}
+
+    def _get_mitigation_policy_for_profile(self, profile: Dict) -> Dict:
+        """
+        Compute mitigation policy for this user from bias_config.
+
+        Returns:
+            {
+              "factor": float,
+              "weight_multipliers": {"semantic": 1.0, "ground_truth": 1.2, ...},
+              "min_score_threshold": float | None,
+              "applied_rules": [...]
+            }
+        """
+        policy = {
+            "factor": 1.0,
+            "weight_multipliers": {},
+            "min_score_threshold": None,
+            "applied_rules": [],
+        }
+
+        if not self.bias_config:
+            return policy
+
+        cfg = self.bias_config
+        slice_rules = cfg.get("slice_rules", {})
+
+        # Global default threshold if provided
+        global_th = cfg.get("global_min_score_threshold")
+        if global_th is not None:
+            policy["min_score_threshold"] = float(global_th)
+
+        # For each slicing field, see if this profile matches a rule
+        for field, field_rules in slice_rules.items():
+            user_value = profile.get(field)
+            if not user_value:
+                continue
+
+            rules_for_value = field_rules.get(user_value)
+            if not rules_for_value:
+                continue
+
+            # 1) Score multiplier
+            sf = rules_for_value.get("score_factor")
+            if sf is not None:
+                policy["factor"] *= float(sf)
+
+            # 2) Per-component weight multipliers
+            for comp, mult in rules_for_value.get("weight_multipliers", {}).items():
+                current = policy["weight_multipliers"].get(comp, 1.0)
+                policy["weight_multipliers"][comp] = current * float(mult)
+
+            # 3) Threshold override – pick the most lenient (lowest)
+            if "min_score_threshold" in rules_for_value:
+                th = float(rules_for_value["min_score_threshold"])
+                if policy["min_score_threshold"] is None:
+                    policy["min_score_threshold"] = th
+                else:
+                    policy["min_score_threshold"] = min(policy["min_score_threshold"], th)
+
+            policy["applied_rules"].append(
+                {"field": field, "value": user_value, "config": rules_for_value}
+            )
+
+        return policy
+
+    # -------------------------------------------------------------------------
+    # Public API
+    # -------------------------------------------------------------------------
+
     async def generate_recommendations(
         self,
         user_id: int,
@@ -167,6 +275,9 @@ class RecommendationService:
             raise ValueError(f"No profile found for user {user_id}")
         
         interests = await self.user_repo.get_user_interests(user_id)
+
+        # NEW: compute mitigation policy for this user
+        mitigation_policy = self._get_mitigation_policy_for_profile(profile)
         
         # Step 2: Get user embedding
         embeddings = await self.user_embedding_service.get_or_generate_user_embeddings(user_id)
@@ -213,13 +324,15 @@ class RecommendationService:
             ground_truth=len(gt_candidates)
         )
         
-        # Step 4: Apply multi-factor scoring
+        # Step 4: Apply multi-factor scoring (WITH mitigation)
         scored_papers = await self._apply_multi_factor_scoring(
             candidates=all_candidates,
             user=profile,
             user_interests=interests,
             scoring_weights=weights,
-            is_cold_start=True
+            is_cold_start=True,
+            mitigation_policy=mitigation_policy,
+            apply_bias_mitigation=True,
         )
         
         # Step 5: Apply diversity filtering and select top N
@@ -244,7 +357,7 @@ class RecommendationService:
             "Cold-start recommendations generated",
             user_id=user_id,
             count=len(enriched),
-            avg_score=np.mean([p['final_score'] for p in enriched])
+            avg_score=np.mean([p['final_score'] for p in enriched]) if enriched else 0.0
         )
         
         return {
@@ -254,7 +367,8 @@ class RecommendationService:
             'model_used': model,
             'scoring_weights': weights,
             'generated_at': datetime.utcnow().isoformat(),
-            'total_candidates': len(all_candidates)
+            'total_candidates': len(all_candidates),
+            'mitigation_policy': mitigation_policy,
         }
     
     async def generate_warm_start_recommendations(
@@ -289,6 +403,9 @@ class RecommendationService:
         
         # Get user data
         profile = await self.user_repo.get_profile(user_id)
+
+        # NEW: mitigation policy for warm-start users too
+        mitigation_policy = self._get_mitigation_policy_for_profile(profile)
         
         # Get user's interaction history
         saved_papers = await self._get_user_saved_papers(user_id)
@@ -347,13 +464,15 @@ class RecommendationService:
             total=len(all_candidates)
         )
         
-        # Apply scoring (different weights for warm-start)
+        # Apply scoring (WITH mitigation)
         scored_papers = await self._apply_multi_factor_scoring(
             candidates=all_candidates,
             user=profile,
             user_interests=None,  # Not used for warm-start
             scoring_weights=weights,
-            is_cold_start=False
+            is_cold_start=False,
+            mitigation_policy=mitigation_policy,
+            apply_bias_mitigation=True,
         )
         
         # Diversity filtering
@@ -386,9 +505,14 @@ class RecommendationService:
             'model_used': model,
             'scoring_weights': weights,
             'generated_at': datetime.utcnow().isoformat(),
-            'total_candidates': len(all_candidates)
+            'total_candidates': len(all_candidates),
+            'mitigation_policy': mitigation_policy,
         }
     
+    # -------------------------------------------------------------------------
+    # Candidate retrieval helpers
+    # -------------------------------------------------------------------------
+
     async def _retrieve_semantic_candidates(
         self,
         user_embedding: np.ndarray,
@@ -419,9 +543,8 @@ class RecommendationService:
         embedding_table = f'paper_embeddings_{model}'
         
         # Convert embedding to PostgreSQL vector string
-        #logger.info(f"user embedding is {user_embedding}")
         embedding_str = user_embedding.tolist()
-        #logger.info(f"the embedding str is {embedding_str}")
+        
         # Vector similarity search
         query = f"""
             WITH user_emb AS (
@@ -633,13 +756,10 @@ class RecommendationService:
         
         for gt_id in gt_paper_ids:
             relationships = await self.gt_repo.get_ground_truth_relationships(gt_id)
-            #print(f"GT relationships for {gt_id}: {relationships}\n")
             if relationships and relationships['citation_network']:
                 all_network_papers.extend(relationships['citation_network'])
-                #print("Added network papers:", relationships['citation_network'])
         # Deduplicate
         unique_network_papers = list(set(all_network_papers))
-        #print(f"Unique network papers count: {len(unique_network_papers)}")
         # Sample requested count
         if len(unique_network_papers) > count:
             sampled_ids = random.sample(unique_network_papers, count)
@@ -924,23 +1044,31 @@ class RecommendationService:
         
         return list(merged.values())
     
+    # -------------------------------------------------------------------------
+    # Scoring + mitigation
+    # -------------------------------------------------------------------------
+
     async def _apply_multi_factor_scoring(
         self,
         candidates: List[Dict],
         user: Dict,
         user_interests: Optional[List[Dict]],
         scoring_weights: Dict[str, float],
-        is_cold_start: bool
+        is_cold_start: bool,
+        mitigation_policy: Optional[Dict] = None,
+        apply_bias_mitigation: bool = True,
     ) -> List[Dict]:
         """
-        Apply multi-factor scoring to candidate papers.
-        
+        Apply multi-factor scoring to candidate papers, with optional bias mitigation.
+
         Args:
             candidates: List of candidate papers
             user: User profile
             user_interests: User's interests (for cold-start)
-            scoring_weights: Weights for each scoring component
+            scoring_weights: Base weights for each scoring component
             is_cold_start: Whether this is cold-start mode
+            mitigation_policy: Per-user mitigation policy (slice-based)
+            apply_bias_mitigation: Toggle mitigation on/off
             
         Returns:
             List of papers with final_score and score_breakdown
@@ -950,13 +1078,31 @@ class RecommendationService:
             candidate_count=len(candidates),
             weights=scoring_weights
         )
-        
+
+        policy = mitigation_policy or {}
+        mit_factor = policy.get("factor", 1.0) if apply_bias_mitigation else 1.0
+        weight_multipliers = policy.get("weight_multipliers", {}) if apply_bias_mitigation else {}
+        min_score_threshold = policy.get("min_score_threshold", None)
+
+        # Start from base weights
+        effective_weights = scoring_weights.copy()
+
+        # Apply per-component weight multipliers for this slice
+        for comp, mult in weight_multipliers.items():
+            if comp in effective_weights:
+                effective_weights[comp] *= float(mult)
+
+        # Optional: renormalize so weights sum to 1 (keeps global scale stable)
+        total_w = sum(effective_weights.values())
+        if total_w > 0:
+            effective_weights = {k: v / total_w for k, v in effective_weights.items()}
+
         # Get max citation count for normalization
         max_citations = await self.db.fetchval(
             "SELECT MAX(citation_count) FROM papers"
         )
         
-        # Get relevant ground truth papers for this user
+        # Get relevant ground truth papers for this user (cold-start only)
         if is_cold_start and user_interests:
             relevant_gt_papers = await self._get_relevant_ground_truth_papers(
                 user_interests=user_interests,
@@ -970,7 +1116,7 @@ class RecommendationService:
         scored_candidates = []
         
         for paper in candidates:
-            scores = {}
+            scores: Dict[str, float] = {}
             
             # 1. Semantic score
             scores['semantic'] = paper.get('semantic_similarity', 0.0)
@@ -995,8 +1141,8 @@ class RecommendationService:
                     relevant_gt_papers
                 )
             else:
-                # For warm-start, this becomes citation_network score
-                scores['citation_network'] = 0.0  # Placeholder
+                # For warm-start, this becomes citation_network score (placeholder)
+                scores['citation_network'] = 0.0
             
             # 5. Reading level score
             scores['reading_level'] = self._calculate_reading_level_score(
@@ -1007,38 +1153,64 @@ class RecommendationService:
             # 6. Diversity factor (placeholder)
             scores['diversity'] = 1.0
             
-            # Calculate final score
+            # Calculate final score using effective_weights + mitigation factor
             if is_cold_start:
                 final_score = (
-                    scoring_weights['semantic'] * scores['semantic'] +
-                    scoring_weights['citation'] * scores['citation'] +
-                    scoring_weights['recency'] * scores['recency'] +
-                    scoring_weights['ground_truth'] * scores['ground_truth'] +
-                    scoring_weights['reading_level'] * scores['reading_level'] +
-                    scoring_weights['diversity'] * scores['diversity']
+                    effective_weights['semantic']      * scores['semantic'] +
+                    effective_weights['citation']      * scores['citation'] +
+                    effective_weights['recency']       * scores['recency'] +
+                    effective_weights['ground_truth']  * scores['ground_truth'] +
+                    effective_weights['reading_level'] * scores['reading_level'] +
+                    effective_weights['diversity']     * scores['diversity']
                 )
             else:
                 final_score = (
-                    scoring_weights['semantic'] * scores['semantic'] +
-                    scoring_weights.get('citation_network', 0.25) * scores['citation_network'] +
-                    scoring_weights.get('collaborative', 0.15) * 0.0 +  # Placeholder
-                    scoring_weights.get('temporal', 0.10) * scores['recency'] +
-                    scoring_weights.get('venue', 0.10) * 0.5 +  # Placeholder
-                    scoring_weights['diversity'] * scores['diversity']
+                    effective_weights.get('semantic', scoring_weights['semantic']) *
+                        scores['semantic'] +
+                    effective_weights.get('citation_network', scoring_weights.get('citation_network', 0.25)) *
+                        scores.get('citation_network', 0.0) +
+                    effective_weights.get('temporal', scoring_weights.get('temporal', 0.10)) *
+                        scores['recency'] +
+                    effective_weights.get('diversity', scoring_weights['diversity']) *
+                        scores['diversity']
+                    # Note: collaborative / venue left as placeholders
                 )
             
+            # Apply global/slice multiplier
+            final_score *= mit_factor
+
             paper['final_score'] = final_score
             paper['score_breakdown'] = scores
+
+            if apply_bias_mitigation:
+                paper['mitigation'] = {
+                    "factor": mit_factor,
+                    "policy": policy,
+                }
             
             scored_candidates.append(paper)
         
         # Sort by final score
         scored_candidates.sort(key=lambda x: x['final_score'], reverse=True)
+
+        # Apply minimum score threshold if defined
+        if min_score_threshold is not None:
+            before = len(scored_candidates)
+            scored_candidates = [
+                p for p in scored_candidates
+                if p['final_score'] >= min_score_threshold
+            ]
+            logger.info(
+                "Applied min_score_threshold",
+                threshold=min_score_threshold,
+                before=before,
+                after=len(scored_candidates),
+            )
         
         logger.info(
             "Multi-factor scoring complete",
             candidate_count=len(scored_candidates),
-            avg_score=np.mean([p['final_score'] for p in scored_candidates]),
+            avg_score=np.mean([p['final_score'] for p in scored_candidates]) if scored_candidates else 0.0,
             max_score=scored_candidates[0]['final_score'] if scored_candidates else 0,
             min_score=scored_candidates[-1]['final_score'] if scored_candidates else 0
         )
@@ -1062,7 +1234,7 @@ class RecommendationService:
         Returns:
             Normalized score (0.0-1.0)
         """
-        if citation_count == 0:
+        if not citation_count or citation_count == 0 or not max_citations:
             return 0.0
         
         # Logarithmic normalization
@@ -1209,7 +1381,7 @@ class RecommendationService:
         Find ground truth papers relevant to user's interests.
         
         Args:
-            user_interests: User's interest terms
+            user_interests: User's interest rows (with 'interest_term')
             domain: User's domain
             
         Returns:
@@ -1231,9 +1403,9 @@ class RecommendationService:
               AND ({conditions})
             LIMIT 10
         """
-        print(f"GT interest query: {query}");
+        print(f"GT interest query: {query}")
         results = await self.db.fetch(query, domain)
-        print(f"GT interest results: {results}");
+        print(f"GT interest results: {results}")
         
         return [r['paper_id'] for r in results]
     
@@ -1257,7 +1429,7 @@ class RecommendationService:
         tier_counts = {'foundational': 0, 'recent': 0, 'trending': 0}
         
         for paper in scored_papers:
-            # FIXED: Proper author extraction
+            # Proper author extraction
             first_author = 'unknown'
             
             if paper.get('authors'):
@@ -1275,20 +1447,16 @@ class RecommendationService:
                         first_author = author_list[0].strip()
                         
                         # Extract last name only
-                        # "Barret Zoph" -> "Zoph"
                         name_parts = first_author.split()
                         if len(name_parts) > 1:
                             first_author = name_parts[-1]  # Last name
             
-            # Check author constraint (more lenient now)
+            # Check author constraint
             if author_counts.get(first_author, 0) >= max_per_author:
                 continue
             
-            # FIXED: Handle NULL venues
+            # Handle NULL venues
             venue = paper.get('venue')
-            
-            # If venue is None/null, treat each paper as unique venue
-            # This prevents all null-venue papers from being grouped together
             if venue is None or venue == 'null' or venue == '':
                 venue = f"unknown_{paper['paper_id'][:8]}"  # Unique identifier
             

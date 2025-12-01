@@ -23,6 +23,7 @@ services:
       - ./services:/app/services
       - ./models:/app/models
       - ./logs:/app/logs
+      - mlflow_data:/mlflow
     depends_on:
       - redis
       - mlflow

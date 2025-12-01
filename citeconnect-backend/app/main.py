@@ -65,31 +65,36 @@ async def lifespan(app: FastAPI):
         from app.services.bootstrap.ground_truth_service import GroundTruthService
         from app.services.bootstrap.experiment_service import ExperimentService
         
-        embedding_service = EmbeddingService(embedding_repo)
-        await embedding_service.initialize()
+        # 1. Embedding Service (Singleton)
+        embedding_service = EmbeddingService() 
         
+        # 2. Ground Truth Service
         ground_truth_service = GroundTruthService(ground_truth_repo, paper_repo)
-        await ground_truth_service.initialize()
+        if hasattr(ground_truth_service, 'initialize'):
+            await ground_truth_service.initialize()
         
+        # 3. Experiment Service
         experiment_service = ExperimentService(db)
-        await experiment_service.initialize()
         
         # Initialize runtime services
         logger.info("Initializing runtime services")
         from app.services.runtime.user_state_service import UserStateService
-        from app.services.runtime.evaluation_service import EvaluationService
+        from app.services.evaluation_service import EvaluationService
+        from app.services.recommendation_service import RecommendationService
         from app.services.runtime.recommendation_orchestrator import RecommendationOrchestrator
         
         user_state_service = UserStateService(user_repo, interaction_repo)
-        evaluation_service = EvaluationService(paper_repo, ground_truth_service)
         
+        # Initialize specialized workers
+        rec_service = RecommendationService(db)
+        evaluation_service = EvaluationService(db)
+        
+        # Initialize Orchestrator with dependencies
         recommendation_orchestrator = RecommendationOrchestrator(
-            paper_repo=paper_repo,
-            embedding_repo=embedding_repo,
-            embedding_service=embedding_service,
-            ground_truth_service=ground_truth_service,
-            user_state_service=user_state_service,
-            experiment_service=experiment_service  # Added experiment service
+            rec_service=rec_service,
+            eval_service=evaluation_service,
+            experiment_service=experiment_service,
+            user_state_service=user_state_service
         )
         
         # Store in app state for access in endpoints
@@ -103,11 +108,11 @@ async def lifespan(app: FastAPI):
         app.state.ground_truth_service = ground_truth_service
         app.state.user_state_service = user_state_service
         app.state.evaluation_service = evaluation_service
-        app.state.experiment_service = experiment_service  # Added to state
+        app.state.experiment_service = experiment_service
         app.state.recommendation_orchestrator = recommendation_orchestrator
         
-        # Check model health
-        model_health = await embedding_service.health_check()
+        # Check model health (CRITICAL FIX: Removed 'await')
+        model_health = embedding_service.health_check()
         logger.info(
             "Model health check complete",
             results=model_health
@@ -299,7 +304,8 @@ async def health_check():
         
         # Check models if service is available
         if hasattr(app.state, 'embedding_service'):
-            model_health = await app.state.embedding_service.health_check()  # Added await here
+            # Fix here too: Removed await
+            model_health = app.state.embedding_service.health_check() 
             health_status["checks"]["models"] = {
                 model: "healthy" if healthy else "unhealthy"
                 for model, healthy in model_health.items()
@@ -311,7 +317,7 @@ async def health_check():
         all_healthy = (
             db_healthy and
             (not hasattr(app.state, 'embedding_service') or 
-             all(model_health.values()))  # Fixed: now model_health is a dict, not a coroutine
+             all(model_health.values()))
         )
         
         health_status["status"] = "healthy" if all_healthy else "degraded"
