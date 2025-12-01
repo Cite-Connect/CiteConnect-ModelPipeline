@@ -419,9 +419,9 @@ class RecommendationService:
         embedding_table = f'paper_embeddings_{model}'
         
         # Convert embedding to PostgreSQL vector string
-        logger.info(f"user embedding is {user_embedding}")
+        #logger.info(f"user embedding is {user_embedding}")
         embedding_str = user_embedding.tolist()
-        logger.info(f"the embedding str is {embedding_str}")
+        #logger.info(f"the embedding str is {embedding_str}")
         # Vector similarity search
         query = f"""
             WITH user_emb AS (
@@ -593,12 +593,12 @@ class RecommendationService:
             interests=user_interests,
             count=count
         )
-        
         # Find relevant ground truth papers
         interest_patterns = ' OR '.join([
-            f"title ILIKE '%{interest}%' OR abstract ILIKE '%{interest}%'"
+            f"p.title ILIKE '%{interest}%' OR p.abstract ILIKE '%{interest}%'"
             for interest in user_interests
         ])
+        print(f"Interest patterns: {interest_patterns}")
         
         query = f"""
             SELECT p.paper_id
@@ -609,8 +609,10 @@ class RecommendationService:
             LIMIT 10
         """
         
-        gt_papers = await self.db.fetch(query, domain)
+        print(f"Executing GT paper query: {query}")
         
+        gt_papers = await self.db.fetch(query, domain)
+        print(f"GT papers fetched: {gt_papers}")
         if not gt_papers:
             logger.warning(
                 "No relevant ground truth papers found",
@@ -620,7 +622,7 @@ class RecommendationService:
             return []
         
         gt_paper_ids = [p['paper_id'] for p in gt_papers]
-        
+        print(f"Relevant GT paper IDs: {gt_paper_ids}")
         logger.debug(
             "Relevant GT papers found",
             count=len(gt_paper_ids)
@@ -631,16 +633,17 @@ class RecommendationService:
         
         for gt_id in gt_paper_ids:
             relationships = await self.gt_repo.get_ground_truth_relationships(gt_id)
-            
+            #print(f"GT relationships for {gt_id}: {relationships}\n")
             if relationships and relationships['citation_network']:
                 all_network_papers.extend(relationships['citation_network'])
-        
+                #print("Added network papers:", relationships['citation_network'])
         # Deduplicate
         unique_network_papers = list(set(all_network_papers))
-        
+        #print(f"Unique network papers count: {len(unique_network_papers)}")
         # Sample requested count
         if len(unique_network_papers) > count:
             sampled_ids = random.sample(unique_network_papers, count)
+            print(f"Sampled GT network paper IDs: {sampled_ids}")
         else:
             sampled_ids = unique_network_papers
         
@@ -660,8 +663,8 @@ class RecommendationService:
                 FROM papers
                 WHERE paper_id = ANY($1::text[])
             """
-            
             papers = await self.db.fetch(query, sampled_ids)
+
             candidates = [dict(p) for p in papers]
             
             # Mark as from ground truth
@@ -959,6 +962,7 @@ class RecommendationService:
                 user_interests=user_interests,
                 domain=user['primary_domain']
             )
+            print(f"Relevant GT papers for scoring: {relevant_gt_papers}")
         else:
             relevant_gt_papers = []
         
@@ -1215,7 +1219,7 @@ class RecommendationService:
         
         # Build ILIKE patterns
         conditions = ' OR '.join([
-            f"title ILIKE '%{term}%' OR abstract ILIKE '%{term}%'"
+            f"p.title ILIKE '%{term}%' OR p.abstract ILIKE '%{term}%'"
             for term in interest_terms
         ])
         
@@ -1227,8 +1231,9 @@ class RecommendationService:
               AND ({conditions})
             LIMIT 10
         """
-        
+        print(f"GT interest query: {query}");
         results = await self.db.fetch(query, domain)
+        print(f"GT interest results: {results}");
         
         return [r['paper_id'] for r in results]
     

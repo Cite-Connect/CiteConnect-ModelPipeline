@@ -5,6 +5,7 @@ Identifies high-quality papers and pre-computes citation networks.
 import asyncio
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -281,7 +282,7 @@ async def identify_canonical_papers():
                 insert_query = """
                     INSERT INTO domain_canonical_papers (
                         domain, recommendation_tier, paper_ids, 
-                        avg_quality_score
+                        avg_quality_score, updated_at
                     )
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (domain, recommendation_tier)
@@ -297,7 +298,7 @@ async def identify_canonical_papers():
                     'foundational',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    result['count']
+                    datetime.utcnow()
                 )
                 
                 logger.debug(
