@@ -1,7 +1,7 @@
 """
 Batch evaluation script for CiteConnect recommendations.
 Evaluates all cold-start users and generates comprehensive report.
-Includes statistical significance testing (A/B testing).
+Includes statistical significance testing (A/B testing) and MLflow tracking.
 """
 import asyncio
 import sys
@@ -11,6 +11,8 @@ from datetime import datetime
 from typing import Optional
 import numpy as np
 from scipy import stats
+import os
+import mlflow # Added MLflow
 
 # Add parent directory to path so we can import app modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -24,6 +26,11 @@ from app.db.repositories.evaluation_repo import EvaluationRepository
 
 setup_logging()
 logger = get_logger(__name__)
+
+# Configure MLflow
+MLFLOW_TRACKING_URI = os.getenv("MLFLOW_TRACKING_URI", "http://localhost:5000")
+mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+mlflow.set_experiment("citeconnect_cold_start")
 
 
 def calculate_p_value(mean_a: float, std_a: float, n_a: int, 
@@ -59,7 +66,7 @@ async def evaluate_all_cold_start_users(
     max_users: Optional[int] = None
 ):
     """
-    Evaluate all cold-start users and generate report.
+    Evaluate all cold-start users, generate report, and log to MLflow.
     """
     logger.info("="*70)
     logger.info(f"BATCH COLD-START EVALUATION: {model.upper()}")
@@ -67,130 +74,174 @@ async def evaluate_all_cold_start_users(
     
     await db.connect()
 
-    # Generate run ID
-    run_id = f"exp_{model}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    # Generate internal run ID
+    internal_run_id = f"exp_{model}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
     current_weights = RecommendationService.DEFAULT_COLD_START_WEIGHTS
     
-    await db.execute("""
-        INSERT INTO experiment_runs (
-            run_id, embedding_model, embedding_dimension, hyperparameters,
-            experiment_type, user_segment, status, started_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
-    """,
-    run_id,
-    'all-MiniLM-L6-v2' if model == 'minilm' else 'specter2',
-    384 if model == 'minilm' else 768,
-    json.dumps(current_weights),
-    'baseline', 'cold_start', 'running'
-    )
-    
-    logger.info(f"Experiment run started: {run_id}")
-    
-    try:
-        query = """
-            SELECT DISTINCT u.user_id, u.email, p.research_stage, 
-                   p.primary_domain, p.reading_level
-            FROM users u
-            JOIN user_profiles_extended p ON u.user_id = p.user_id
-            JOIN user_recommendation_state s ON u.user_id = s.user_id
-            WHERE s.recommendation_stage = 'cold_start'
-              AND u.is_active = true
-            ORDER BY u.user_id
-        """
+    # Start MLflow Run
+    with mlflow.start_run(run_name=f"eval_{model}") as run:
+        mlflow_run_id = run.info.run_id
+        logger.info(f"MLflow Run Started: {mlflow_run_id}")
+        
+        # Log Parameters to MLflow
+        mlflow.log_param("model", model)
+        mlflow.log_param("embedding_dimension", 384 if model == 'minilm' else 768)
+        mlflow.log_params(current_weights)
         if max_users:
-            query += f" LIMIT {max_users}"
-        
-        users = await db.fetch(query)
-        if not users:
-            logger.warning("No cold-start users found")
-            return
-        
-        logger.info(f"Found {len(users)} cold-start users to evaluate")
-        rec_service = RecommendationService(db)
-        eval_service = EvaluationService(db)
-        
-        results = []
-        successes = 0
-        failures = 0
-        
-        for i, user in enumerate(users, 1):
-            user_id = user['user_id']
-            if i % 10 == 0 or i == 1:
-                logger.info(f"Processing user {i}/{len(users)} (ID: {user_id})")
-            
-            try:
-                rec_result = await rec_service.generate_cold_start_recommendations(
-                    user_id=user_id, count=10, model=model
-                )
-                eval_result = await eval_service.evaluate_cold_start_recommendations(
-                    user_id=user_id, recommendations=rec_result['papers'],
-                    model=model, store_result=True
-                )
-                
-                results.append({
-                    'user_id': user_id,
-                    'email': user['email'],
-                    'research_stage': user['research_stage'],
-                    'primary_domain': user['primary_domain'],
-                    'reading_level': user['reading_level'],
-                    'profile_alignment': eval_result['profile_alignment'],
-                    'ground_truth_quality': eval_result['ground_truth_quality'],
-                    'combined_score': eval_result['combined_score'],
-                    'passes': eval_result['passes_threshold']
-                })
-                successes += 1
-            except Exception as e:
-                logger.error(f"User {user_id} failed: {e}")
-                failures += 1
-        
-        # Calculate statistics gracefully
-        combined_scores = [r['combined_score'] for r in results] if results else []
-        profile_scores = [r['profile_alignment'] for r in results] if results else []
-        gt_scores = [r['ground_truth_quality'] for r in results] if results else []
-        passed = sum(1 for r in results if r['passes']) if results else 0
-        
-        avg_combined = np.mean(combined_scores) if combined_scores else 0.0
-        std_combined = np.std(combined_scores) if combined_scores else 0.0
-        
-        # Identify bias
-        stages = {}
-        for r in results:
-            stage = r['research_stage'] or 'unknown'
-            if stage not in stages: stages[stage] = []
-            stages[stage].append(r['combined_score'])
-            
-        # FIX: Initialize bias_magnitude safely to avoid UnboundLocalError
-        bias_magnitude = 0.0
-        if len(stages) > 1:
-            stage_avgs = [np.mean(s) for s in stages.values()]
-            if stage_avgs:
-                bias_magnitude = max(stage_avgs) - min(stage_avgs)
+            mlflow.log_param("max_users_limit", max_users)
 
+        # INSERT experiment run into DB (Linked to MLflow)
         await db.execute("""
-            UPDATE experiment_runs
-            SET status = 'completed', ended_at = NOW(), results = $1
-            WHERE run_id = $2
+            INSERT INTO experiment_runs (
+                run_id, embedding_model, embedding_dimension, hyperparameters,
+                experiment_type, user_segment, status, started_at,
+                mlflow_run_id, mlflow_experiment_id
+            ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)
         """,
-        json.dumps({
-            'total_users': len(users),
-            'successful_evaluations': successes,
-            'avg_combined_score': float(avg_combined),
-            'std_combined_score': float(std_combined),
-            'avg_profile_alignment': float(np.mean(profile_scores)) if profile_scores else 0.0,
-            'avg_ground_truth_quality': float(np.mean(gt_scores)) if gt_scores else 0.0,
-            'pass_rate': passed/len(results) if results else 0.0,
-            'bias_magnitude': float(bias_magnitude)
-        }),
-        run_id
+        internal_run_id,
+        'all-MiniLM-L6-v2' if model == 'minilm' else 'specter2',
+        384 if model == 'minilm' else 768,
+        json.dumps(current_weights),
+        'baseline', 'cold_start', 'running',
+        mlflow_run_id, run.info.experiment_id
         )
-
-        logger.info("="*70)
-        logger.info(f"EVALUATION COMPLETE: {model}")
-        logger.info(f"Avg Score: {avg_combined:.4f} (Std: {std_combined:.4f})")
-        logger.info("="*70)
         
-    finally:
-        await db.disconnect()
+        logger.info(f"DB Experiment run started: {internal_run_id}")
+        
+        try:
+            query = """
+                SELECT DISTINCT u.user_id, u.email, p.research_stage, 
+                       p.primary_domain, p.reading_level
+                FROM users u
+                JOIN user_profiles_extended p ON u.user_id = p.user_id
+                JOIN user_recommendation_state s ON u.user_id = s.user_id
+                WHERE s.recommendation_stage = 'cold_start'
+                  AND u.is_active = true
+                ORDER BY u.user_id
+            """
+            if max_users:
+                query += f" LIMIT {max_users}"
+            
+            users = await db.fetch(query)
+            if not users:
+                logger.warning("No cold-start users found")
+                return
+            
+            logger.info(f"Found {len(users)} cold-start users to evaluate")
+            rec_service = RecommendationService(db)
+            eval_service = EvaluationService(db)
+            
+            results = []
+            successes = 0
+            failures = 0
+            
+            for i, user in enumerate(users, 1):
+                user_id = user['user_id']
+                if i % 10 == 0 or i == 1:
+                    logger.info(f"Processing user {i}/{len(users)} (ID: {user_id})")
+                
+                try:
+                    rec_result = await rec_service.generate_cold_start_recommendations(
+                        user_id=user_id, count=10, model=model
+                    )
+                    eval_result = await eval_service.evaluate_cold_start_recommendations(
+                        user_id=user_id, recommendations=rec_result['papers'],
+                        model=model, store_result=True
+                    )
+                    
+                    results.append({
+                        'user_id': user_id,
+                        'email': user['email'],
+                        'research_stage': user['research_stage'],
+                        'primary_domain': user['primary_domain'],
+                        'reading_level': user['reading_level'],
+                        'profile_alignment': eval_result['profile_alignment'],
+                        'ground_truth_quality': eval_result['ground_truth_quality'],
+                        'combined_score': eval_result['combined_score'],
+                        'passes': eval_result['passes_threshold']
+                    })
+                    successes += 1
+                except Exception as e:
+                    logger.error(f"User {user_id} failed: {e}")
+                    failures += 1
+            
+            # Calculate statistics
+            combined_scores = [r['combined_score'] for r in results] if results else []
+            profile_scores = [r['profile_alignment'] for r in results] if results else []
+            gt_scores = [r['ground_truth_quality'] for r in results] if results else []
+            passed = sum(1 for r in results if r['passes']) if results else 0
+            
+            avg_combined = np.mean(combined_scores) if combined_scores else 0.0
+            std_combined = np.std(combined_scores) if combined_scores else 0.0
+            avg_profile = np.mean(profile_scores) if profile_scores else 0.0
+            avg_gt = np.mean(gt_scores) if gt_scores else 0.0
+            pass_rate = passed/len(results) if results else 0.0
+            
+            # Identify bias
+            stages = {}
+            for r in results:
+                stage = r['research_stage'] or 'unknown'
+                if stage not in stages: stages[stage] = []
+                stages[stage].append(r['combined_score'])
+                
+            bias_magnitude = 0.0
+            if len(stages) > 1:
+                stage_avgs = [np.mean(s) for s in stages.values()]
+                if stage_avgs:
+                    bias_magnitude = max(stage_avgs) - min(stage_avgs)
+
+            # Log Metrics to MLflow
+            mlflow.log_metric("avg_combined_score", avg_combined)
+            mlflow.log_metric("std_combined_score", std_combined)
+            mlflow.log_metric("avg_profile_alignment", avg_profile)
+            mlflow.log_metric("avg_ground_truth_quality", avg_gt)
+            mlflow.log_metric("pass_rate", pass_rate)
+            mlflow.log_metric("bias_magnitude", bias_magnitude)
+            mlflow.log_metric("total_users", len(users))
+            mlflow.log_metric("successful_evaluations", successes)
+
+            # Save detailed results JSON as MLflow Artifact
+            output_file = f"results_{internal_run_id}.json"
+            with open(output_file, 'w') as f:
+                json.dump({
+                    'run_id': internal_run_id,
+                    'mlflow_run_id': mlflow_run_id,
+                    'metrics': {
+                        'avg_combined_score': avg_combined,
+                        'pass_rate': pass_rate
+                    },
+                    'details': results
+                }, f, indent=2)
+            
+            mlflow.log_artifact(output_file)
+            os.remove(output_file) # Clean up local file
+
+            # UPDATE experiment run in DB
+            await db.execute("""
+                UPDATE experiment_runs
+                SET status = 'completed', ended_at = NOW(), results = $1
+                WHERE run_id = $2
+            """,
+            json.dumps({
+                'total_users': len(users),
+                'successful_evaluations': successes,
+                'avg_combined_score': float(avg_combined),
+                'std_combined_score': float(std_combined),
+                'avg_profile_alignment': float(avg_profile),
+                'avg_ground_truth_quality': float(avg_gt),
+                'pass_rate': float(pass_rate),
+                'bias_magnitude': float(bias_magnitude)
+            }),
+            internal_run_id
+            )
+
+            logger.info("="*70)
+            logger.info(f"EVALUATION COMPLETE: {model}")
+            logger.info(f"Avg Score: {avg_combined:.4f} (Std: {std_combined:.4f})")
+            logger.info("="*70)
+            
+        finally:
+            await db.disconnect()
 
 
 async def compare_models():
@@ -246,7 +297,7 @@ async def compare_models():
         print(f"\n🏆 WINNER: {winner}")
         print(f"   P-Value: {p_value:.5f} ({significance})")
 
-        # CRITICAL FIX: Changed created_at to started_at to match DB schema
+        # Save comparison to DB
         await db.execute("""
             INSERT INTO ab_test_comparisons (
                 test_name, model_a, model_a_run_id, model_b, model_b_run_id,
