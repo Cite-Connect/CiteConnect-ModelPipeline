@@ -1,0 +1,51 @@
+{
+  "generated_at": "2025-12-02T00:42:44.139711",
+  "mode": "cold_start",
+  "model": "minilm",
+  "search_space": {
+    "semantic": [
+      0.3,
+      0.35,
+      0.4,
+      0.45
+    ],
+    "citation": [
+      0.1,
+      0.15,
+      0.2,
+      0.25
+    ],
+    "recency": [
+      0.1,
+      0.15,
+      0.2
+    ],
+    "ground_truth": [
+      0.05,
+      0.1,
+      0.15
+    ],
+    "reading_level": [
+      0.05,
+      0.1,
+      0.15
+    ],
+    "diversity": [
+      0.05,
+      0.1
+    ]
+  },
+  "strategy": "placeholder_random_search",
+  "objective": "future: MRR + (1 - bias_score)",
+  "best_config": {
+    "weights": {
+      "semantic": 0.4,
+      "citation": 0.2,
+      "recency": 0.15,
+      "ground_truth": 0.1,
+      "reading_level": 0.1,
+      "diversity": 0.05
+    },
+    "notes": "Initial deployment uses hand-tuned defaults. Once interaction data is available, plug in MRR / NDCG and bias penalty here to choose the best weight combination."
+  }
+}

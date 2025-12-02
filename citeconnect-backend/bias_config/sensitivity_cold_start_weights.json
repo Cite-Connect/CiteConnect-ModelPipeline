@@ -1,0 +1,98 @@
+{
+  "generated_at": "2025-12-02T03:57:16.487891",
+  "baseline_weights": {
+    "semantic": 0.4,
+    "citation": 0.2,
+    "recency": 0.15,
+    "ground_truth": 0.1,
+    "reading_level": 0.1,
+    "diversity": 0.05
+  },
+  "scenarios": {
+    "baseline": {
+      "weights": {
+        "semantic": 0.4,
+        "citation": 0.2,
+        "recency": 0.15,
+        "ground_truth": 0.1,
+        "reading_level": 0.1,
+        "diversity": 0.05
+      },
+      "metrics": {
+        "mean_final_score": 0.5334519370238794,
+        "std_final_score": 0.08859133735363656,
+        "mean_user_score": 0.5334519370238794,
+        "user_count": 1,
+        "total_recommendations": 10
+      }
+    },
+    "semantic_plus_20": {
+      "weights": {
+        "semantic": 0.4444444444444444,
+        "citation": 0.18518518518518517,
+        "recency": 0.13888888888888887,
+        "ground_truth": 0.09259259259259259,
+        "reading_level": 0.09259259259259259,
+        "diversity": 0.046296296296296294
+      },
+      "metrics": {
+        "mean_final_score": 0.5339536715315599,
+        "std_final_score": 0.09281549603785405,
+        "mean_user_score": 0.5339536715315599,
+        "user_count": 1,
+        "total_recommendations": 10
+      }
+    },
+    "semantic_minus_20": {
+      "weights": {
+        "semantic": 0.3478260869565218,
+        "citation": 0.21739130434782608,
+        "recency": 0.16304347826086954,
+        "ground_truth": 0.10869565217391304,
+        "reading_level": 0.10869565217391304,
+        "diversity": 0.05434782608695652
+      },
+      "metrics": {
+        "mean_final_score": 0.565722745203621,
+        "std_final_score": 0.052474689088616355,
+        "mean_user_score": 0.565722745203621,
+        "user_count": 1,
+        "total_recommendations": 10
+      }
+    },
+    "citation_plus_20": {
+      "weights": {
+        "semantic": 0.38461538461538464,
+        "citation": 0.23076923076923075,
+        "recency": 0.14423076923076922,
+        "ground_truth": 0.09615384615384616,
+        "reading_level": 0.09615384615384616,
+        "diversity": 0.04807692307692308
+      },
+      "metrics": {
+        "mean_final_score": 0.5543918151938669,
+        "std_final_score": 0.06341980895192252,
+        "mean_user_score": 0.5543918151938669,
+        "user_count": 1,
+        "total_recommendations": 10
+      }
+    },
+    "citation_minus_20": {
+      "weights": {
+        "semantic": 0.41666666666666663,
+        "citation": 0.16666666666666669,
+        "recency": 0.15624999999999997,
+        "ground_truth": 0.10416666666666666,
+        "reading_level": 0.10416666666666666,
+        "diversity": 0.05208333333333333
+      },
+      "metrics": {
+        "mean_final_score": 0.5433143626021527,
+        "std_final_score": 0.08429001754842574,
+        "mean_user_score": 0.5433143626021527,
+        "user_count": 1,
+        "total_recommendations": 10
+      }
+    }
+  }
+}
