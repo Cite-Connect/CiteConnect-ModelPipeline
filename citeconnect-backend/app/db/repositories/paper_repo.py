@@ -36,12 +36,12 @@ class PaperRepository(BaseRepository):
         logger.debug("Finding paper by paper_id", paper_id=paper_id)
         
         query = """
-            SELECT 
-                p.*,
-                pqs.composite_score as quality_score
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
-            WHERE p.paper_id = $1
+            SELECT p.*
+                FROM papers p
+                WHERE p.domain = $1
+                AND p.citation_count >= 10
+                ORDER BY p.citation_count DESC
+                LIMIT $2
         """
         
         try:
@@ -86,12 +86,12 @@ class PaperRepository(BaseRepository):
         )
         
         query = """
-            SELECT 
-                p.*,
-                pqs.composite_score as quality_score
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
-            WHERE p.domain = $1
+            SELECT p.*
+                FROM papers p
+                WHERE p.domain = $1
+                AND p.citation_count >= 10
+                ORDER BY p.citation_count DESC
+                LIMIT $2
         """
         
         params = [domain]

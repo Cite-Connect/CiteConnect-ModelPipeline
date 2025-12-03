@@ -79,7 +79,7 @@ class RecommendationRequest(BaseModel):
     @validator('model_preference')
     def validate_model(cls, v):
         """Validate model name."""
-        allowed = ['all-MiniLM-L6-v2', 'specter2', 'auto']
+        allowed = ['all-MiniLM-L6-v2', 'specter2', 'auto','minilm','specter']
         if v not in allowed:
             raise ValueError(f"Model must be one of {allowed}")
         return v

@@ -24,7 +24,7 @@ def test_generate_recommendations():
         "user_id": USER_ID,
         "count": 5,
         # CRITICAL FIX: Use the exact string expected by the API validation
-        "model_preference": "all-MiniLM-L6-v2", 
+        "model_preference": "minilm", 
         # CRITICAL FIX: Add session_id (required by API)
         "session_id": str(uuid.uuid4()),
         "filters": {
