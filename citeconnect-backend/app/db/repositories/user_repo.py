@@ -33,7 +33,7 @@ class UserRepository(BaseRepository):
         Returns:
             Optional[Record]: User record or None
         """
-        logger.debug("Finding user by email", email=email)
+        logger.info("Finding user by email", email=email)
         
         query = """
             SELECT * FROM users
@@ -41,6 +41,7 @@ class UserRepository(BaseRepository):
         """
         
         try:
+            logger.debug("Executing email lookup query", email=email)
             result = await self.db.fetchrow(query, email)
             logger.debug(
                 "User email lookup complete",

@@ -145,6 +145,12 @@ class UserProfileUpdate(BaseModel):
     semantic_scholar_author_id: Optional[str] = None
 
 
+class UserLogin(BaseModel):
+    """User login request."""
+    email: EmailStr
+    password: str
+
+
 class Token(BaseModel):
     """JWT token response."""
     access_token: str
@@ -303,37 +309,35 @@ async def register_user(
     description="Authenticate user and get access token"
 )
 async def login(
-    email: EmailStr,
-    password: str,
+    login_data: UserLogin,
     user_repo: UserRepository = Depends(get_user_repo)
 ):
     """
     Authenticate user.
     
     Args:
-        email: User email
-        password: User password
+        login_data: Login credentials
         user_repo: User repository
         
     Returns:
         Access token
     """
-    logger.info("Login attempt", email=email)
+    logger.info("Login attempt", email=login_data.email)
     
     try:
         # Find user
-        user = await user_repo.find_by_email(email)
+        user = await user_repo.find_by_email(login_data.email)
         
         if not user:
-            logger.warning("Login failed: user not found", email=email)
+            logger.warning("Login failed: user not found", email=login_data.email)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password"
             )
         
         # Verify password
-        if not verify_password(password, user['password_hash']):
-            logger.warning("Login failed: invalid password", email=email)
+        if not verify_password(login_data.password, user['password_hash']):
+            logger.warning("Login failed: invalid password", email=login_data.email)
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Incorrect email or password"
@@ -341,7 +345,7 @@ async def login(
         
         # Check if active
         if not user['is_active']:
-            logger.warning("Login failed: inactive account", email=email)
+            logger.warning("Login failed: inactive account", email=login_data.email)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is inactive"
@@ -358,7 +362,7 @@ async def login(
         logger.info(
             "Login successful",
             user_id=user['user_id'],
-            email=email
+            email=login_data.email
         )
         
         return {
@@ -372,7 +376,7 @@ async def login(
     except Exception as e:
         logger.error(
             "Login failed",
-            email=email,
+            email=login_data.email,
             error=str(e),
             exc_info=True
         )
