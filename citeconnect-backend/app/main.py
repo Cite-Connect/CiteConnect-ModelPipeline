@@ -18,7 +18,7 @@ from app.services.bootstrap.embedding_service import EmbeddingService
 # Setup logging first
 setup_logging()
 logger = get_logger(__name__)
-
+_startup_complete = False
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -26,6 +26,7 @@ async def lifespan(app: FastAPI):
     Application lifespan manager.
     Handles startup and shutdown events.
     """
+    global _startup_complete
     # Startup
     logger.info(
         "Starting CiteConnect application",
@@ -128,6 +129,8 @@ async def lifespan(app: FastAPI):
             "Application startup complete",
             models_loaded=list(embedding_service.models.keys())
         )
+        _startup_complete = True
+        logger.info("Application is ready to accept requests")
         
         yield
         
@@ -137,10 +140,12 @@ async def lifespan(app: FastAPI):
             error=str(e),
             exc_info=True
         )
+        _startup_complete = False
         raise
     
     finally:
         # Shutdown
+        _startup_complete = False
         logger.info("Shutting down application")
         
         try:
@@ -288,7 +293,17 @@ async def health_check():
     Health check endpoint for monitoring.
     Checks database and model availability.
     """
+    global _startup_complete
     logger.debug("Health check requested")
+
+    if not _startup_complete:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={
+                "status": "starting",
+                "message": "Application is still initializing"
+            }
+        )
     
     health_status = {
         "status": "healthy",

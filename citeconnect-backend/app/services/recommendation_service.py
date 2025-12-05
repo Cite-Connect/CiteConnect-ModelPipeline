@@ -281,7 +281,26 @@ class RecommendationService:
         
         # Step 2: Get user embedding
         embeddings = await self.user_embedding_service.get_or_generate_user_embeddings(user_id)
-        user_embedding = embeddings[model]
+        model_key_map = {
+        'all-MiniLM-L6-v2': 'minilm',
+        'minilm': 'minilm',
+        'specter': 'specter',
+        'specter2': 'specter'
+    }
+        embedding_model_key = model_key_map.get(model, 'minilm')
+        embedding_key = model_key_map.get(model, 'minilm')
+    
+        if embedding_key not in embeddings:
+            logger.error(
+                "Model embedding not found",
+                requested_model=model,
+                embedding_key=embedding_key,
+                available_keys=list(embeddings.keys())
+            )
+            raise ValueError(f"Model '{model}' not available. Available: {list(embeddings.keys())}")
+        
+        user_embedding = embeddings[embedding_key]
+        
         
         # Step 3: Retrieve candidates (3 strategies)
         logger.debug("Retrieving candidates", user_id=user_id)
@@ -538,9 +557,16 @@ class RecommendationService:
             model=model,
             limit=limit
         )
+        table_map = {
+        'all-MiniLM-L6-v2': 'paper_embeddings_minilm',
+        'minilm': 'paper_embeddings_minilm',
+        'specter': 'paper_embeddings_specter',
+        'specter2': 'paper_embeddings_specter'
+        }
         
         # Determine table based on model
-        embedding_table = f'paper_embeddings_{model}'
+        embedding_table = table_map.get(model, 'paper_embeddings_minilm')
+        #embedding_table = f'paper_embeddings_{model}'
         
         # Convert embedding to PostgreSQL vector string
         embedding_str = user_embedding.tolist()

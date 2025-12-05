@@ -25,14 +25,21 @@ def get_recommendation_orchestrator(request: Request) -> RecommendationOrchestra
     """
     Dependency to get recommendation orchestrator from app state.
     """
+    logger.info("Getting recommendation orchestrator from app state")
+    
     if not hasattr(request.app.state, 'recommendation_orchestrator'):
-        logger.error("Recommendation orchestrator not initialized")
+        logger.error(
+            "Recommendation orchestrator not initialized",
+            available_attrs=dir(request.app.state)
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Recommendation service not available"
+            detail="Recommendation service not available - service still starting up"
         )
     
-    return request.app.state.recommendation_orchestrator
+    orchestrator = request.app.state.recommendation_orchestrator
+    logger.info("Successfully retrieved recommendation orchestrator")
+    return orchestrator
 
 
 @router.post(
@@ -68,13 +75,27 @@ async def get_recommendations(
                 detail="User ID is required for recommendations"
             )
         
+        logger.info(
+            "Validated request, generating recommendations",
+            user_id=request_data.user_id
+        )
+        
         # Map 'minilm' shortcode to full model name if necessary
-        # This handles the case where frontend/scripts send short names
         model_map = {
             'minilm': 'all-MiniLM-L6-v2',
             'specter': 'specter2'
         }
-        model_name = model_map.get(request_data.model_preference, request_data.model_preference)
+        model_name = model_map.get(
+            request_data.model_preference, 
+            request_data.model_preference
+        )
+        
+        logger.info(
+            "Calling orchestrator.generate_recommendations",
+            user_id=request_data.user_id,
+            model_name=model_name,
+            count=request_data.count
+        )
 
         # Generate recommendations
         result = await orchestrator.generate_recommendations(
@@ -94,7 +115,13 @@ async def get_recommendations(
         
         return result
         
-    except HTTPException:
+    except HTTPException as he:
+        logger.warning(
+            "HTTPException in get_recommendations",
+            status_code=he.status_code,
+            detail=he.detail,
+            user_id=request_data.user_id
+        )
         raise
     
     except Exception as e:
@@ -102,6 +129,7 @@ async def get_recommendations(
             "Recommendation generation failed",
             user_id=request_data.user_id,
             error=str(e),
+            error_type=type(e).__name__,
             exc_info=True
         )
         
@@ -111,7 +139,7 @@ async def get_recommendations(
                 "error": {
                     "code": "RECOMMENDATION_FAILED",
                     "message": "Failed to generate recommendations",
-                    "details": str(e) if logger.level == "DEBUG" else None
+                    "details": str(e)
                 }
             }
         )
@@ -130,10 +158,13 @@ async def get_recommendation_history(
     """
     Get user's recommendation history.
     """
-    logger.info("Recommendation history requested", user_id=user_id, limit=limit)
+    logger.info(
+        "Recommendation history requested", 
+        user_id=user_id, 
+        limit=limit
+    )
     
     try:
-        # This matches the column name usually created by the schema migration
         query = """
            SELECT 
                 re.event_id,
@@ -146,7 +177,9 @@ async def get_recommendation_history(
             LIMIT $2
         """
         
+        logger.info("Executing history query", user_id=user_id)
         results = await db.fetch(query, user_id, limit)
+        logger.info("History query complete", result_count=len(results))
         
         history = [
             {
@@ -164,7 +197,13 @@ async def get_recommendation_history(
         }
         
     except Exception as e:
-        logger.error("History retrieval failed", user_id=user_id, error=str(e), exc_info=True)
+        logger.error(
+            "History retrieval failed", 
+            user_id=user_id, 
+            error=str(e),
+            error_type=type(e).__name__,
+            exc_info=True
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve recommendation history"
@@ -196,7 +235,10 @@ async def evaluate_recommendations(
         
         papers = await paper_repo.find_by_ids(paper_ids)
         if not papers:
-            raise HTTPException(status_code=404, detail="No papers found for provided IDs")
+            raise HTTPException(
+                status_code=404, 
+                detail="No papers found for provided IDs"
+            )
             
         recommendations = [dict(p) for p in papers]
         
@@ -225,6 +267,7 @@ async def evaluate_recommendations(
             "Evaluation failed",
             user_id=user_id,
             error=str(e),
+            error_type=type(e).__name__,
             exc_info=True
         )
         raise HTTPException(

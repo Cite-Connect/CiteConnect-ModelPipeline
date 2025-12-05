@@ -63,7 +63,16 @@ class RecommendationOrchestrator:
         # ---------------------------------------------------------
         # 1. Context & Strategy Assignment
         # ---------------------------------------------------------
+        logger.info(
+            "🎯 ORCHESTRATOR START",
+            user_id=user_id,
+            model_name=model_name,
+            count=count
+        )
+        
+        start_time = time.time()
         try:
+            logger.info("Step 1: Getting user context")
             user_context = await self.user_state_service.get_user_context(user_id)
         except Exception as e:
             logger.warning(f"Failed to get user context: {e}. Using defaults.")
@@ -177,11 +186,13 @@ class RecommendationOrchestrator:
             try:
                 # Log event for MLflow/Offline analysis
                 # Ideally, this should be non-blocking (fire and forget)
+                eval_report_with_strategy = eval_report.copy()
+                eval_report_with_strategy['strategy_used'] = strategy_used
                 await self.experiment_service.log_recommendation_event(
                     user_id=user_id,
                     model_name=model_name,
                     recommendations=recommendations,
-                    evaluation_scores=eval_report,
+                    evaluation_scores=eval_report_with_strategy,
                     user_context=user_context,
                     generation_time_ms=generation_time
                 )
@@ -192,13 +203,15 @@ class RecommendationOrchestrator:
         # 5. Response Construction
         # ---------------------------------------------------------
         response = {
-            "recommendations": recommendations,
-            "metadata": {
-                "user_stage": user_context.get('stage'),
-                "strategy_used": strategy_used,
-                "model_used": model_name,
-                "evaluation_score": eval_report.get('combined_score') or eval_report.get('precision_at_10'),
-                "generation_time_ms": round(generation_time, 2)
+        "recommendations": recommendations,
+        "metadata": {
+            "user_stage": user_context.get('stage'),
+            "strategy_used": strategy_used,
+            "model_used": model_name,
+            "evaluation_score": eval_report.get('combined_score') or eval_report.get('precision_at_10',0.0),
+            "evaluation_scores": eval_report,  # ADD THIS - full eval report
+            "cache_hit": False,  # ADD THIS - set to False for now
+            "generation_time_ms": round(generation_time, 2)
             }
         }
         
