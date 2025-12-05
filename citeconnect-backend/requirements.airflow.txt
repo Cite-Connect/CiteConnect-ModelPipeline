@@ -1,0 +1,25 @@
+# Minimal requirements for Airflow DAGs
+# Only includes what's needed for the model_pipeline_dag.py
+
+# Database
+asyncpg>=0.29.0
+supabase>=2.3.0
+
+# Configuration & Settings
+pydantic-settings>=2.1.0
+pydantic>=2.5.0
+
+# Logging
+structlog>=23.2.0
+
+# Utilities
+python-dotenv>=1.0.0
+
+# ML/AI Dependencies (for RecommendationService -> EmbeddingService)
+# Note: torch is installed separately in Dockerfile to use CPU-only version
+sentence-transformers>=2.2.0
+numpy>=1.24.0
+
+# MLflow (optional - only needed for ExperimentService, not for DAGs)
+# mlflow>=2.8.0  # Commented out - DAGs don't need MLflow
+

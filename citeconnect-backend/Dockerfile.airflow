@@ -1,0 +1,17 @@
+FROM apache/airflow:2.9.2
+
+USER root
+
+# Install system dependencies if needed
+RUN apt-get update && apt-get install -y \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+USER airflow
+
+# Copy requirements and install Python dependencies (minimal set for DAGs)
+COPY requirements.airflow.txt /tmp/requirements.txt
+# Install PyTorch CPU-only first (smaller, no CUDA) to avoid disk space issues
+RUN pip install --no-cache-dir --index-url https://download.pytorch.org/whl/cpu torch torchvision torchaudio --no-deps && \
+    pip install --no-cache-dir -r /tmp/requirements.txt
+
