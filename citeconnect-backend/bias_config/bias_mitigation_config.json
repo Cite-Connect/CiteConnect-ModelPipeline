@@ -1,0 +1,27 @@
+{
+  "cold_start": {
+    "minilm": {
+      "primary_domain": {
+        "underperforming_slices": [
+          "fintech"
+        ],
+        "boost_factor": 1.25,
+        "min_score_floor": 0.252
+      },
+      "research_stage": {
+        "underperforming_slices": [
+          "industry"
+        ],
+        "boost_factor": 1.25,
+        "min_score_floor": 0.223
+      },
+      "reading_level": {
+        "underperforming_slices": [
+          "intermediate"
+        ],
+        "boost_factor": 1.25,
+        "min_score_floor": 0.257
+      }
+    }
+  }
+}

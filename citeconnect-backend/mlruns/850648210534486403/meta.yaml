@@ -1,0 +1,6 @@
+artifact_location: file:///Users/sahilmohanty/Documents/MachineLearningOperationsProject-CiteConnect/CiteConnect-ModelPipeline/citeconnect-backend/mlruns/850648210534486403
+creation_time: 1763249467142
+experiment_id: '850648210534486403'
+last_update_time: 1763249467142
+lifecycle_stage: active
+name: paper_recommendations

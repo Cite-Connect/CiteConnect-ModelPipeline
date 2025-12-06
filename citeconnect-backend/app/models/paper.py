@@ -1,338 +1,180 @@
-# app/models/paper.py
-
 """
-Paper Data Models Module
-
-This module defines internal Pydantic models for paper-related data.
-These models represent the structure of academic papers as stored in
-the database and used throughout the application.
-
-Models:
-- Paper: Complete paper metadata and content
-- PaperMetadata: Basic paper metadata
-- PaperEmbedding: Paper embedding vector
+Pydantic models for paper-related data structures.
+Provides validation and serialization for API requests/responses.
 """
-
-import logging
-from datetime import datetime
 from typing import Optional, List
+from datetime import datetime
 from pydantic import BaseModel, Field, validator
 
-# Initialize logger for this module
-logger = logging.getLogger(__name__)
 
-
-class PaperMetadata(BaseModel):
-    """
-    Basic paper metadata.
-    
-    Lightweight model containing essential paper information
-    without full content.
-    
-    Attributes:
-        paper_id: Unique paper identifier
-        title: Paper title
-        authors: List of author names
-        year: Publication year
-        venue: Publication venue (journal/conference)
-        citation_count: Number of citations
-        domain: Research domain
-    """
-    
-    paper_id: str = Field(
-        ...,
-        description="Unique paper identifier (e.g., arxiv:2401.12345)"
-    )
-    
-    title: str = Field(
-        ...,
-        min_length=1,
-        max_length=500,
-        description="Paper title"
-    )
-    
-    authors: List[str] = Field(
-        default_factory=list,
-        description="List of author names"
-    )
-    
-    year: int = Field(
-        ...,
-        ge=1900,
-        le=2030,
-        description="Publication year"
-    )
-    
-    venue: Optional[str] = Field(
-        None,
-        max_length=255,
-        description="Publication venue"
-    )
-    
-    citation_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of citations"
-    )
-    
-    domain: str = Field(
-        ...,
-        description="Research domain"
-    )
-    
-    @validator('domain')
-    def validate_domain(cls, v: str) -> str:
-        """Validate domain is one of allowed values."""
-        allowed_domains = ['healthcare', 'fintech', 'quantum_computing']
-        if v not in allowed_domains:
-            logger.error(f"Invalid domain: {v}")
-            raise ValueError(f"Domain must be one of {allowed_domains}")
-        return v
+class PaperBase(BaseModel):
+    """Base paper model with common fields."""
+    paper_id: str = Field(..., description="Unique paper identifier (SHA-1 hash)")
+    title: str = Field(..., min_length=1, max_length=500)
+    authors: List[str] = Field(default_factory=list)
+    year: Optional[int] = Field(None, ge=1900, le=2030)
+    abstract: Optional[str] = Field(None, max_length=5000)
     
     @validator('authors')
-    def validate_authors(cls, v: List[str]) -> List[str]:
-        """Validate authors list is not empty."""
-        if not v:
-            logger.warning("Paper has no authors listed")
+    def validate_authors(cls, v):
+        """Ensure authors list is not empty if provided."""
+        if v is not None and len(v) == 0:
+            raise ValueError("Authors list cannot be empty if provided")
+        return v
+
+
+class PaperCreate(PaperBase):
+    """Model for creating a new paper."""
+    domain: str = Field(..., description="Research domain")
+    references: List[str] = Field(default_factory=list, description="Cited papers")
+    published_date: Optional[datetime] = None
+    venue: Optional[str] = None
+    doi: Optional[str] = None
+
+
+class PaperResponse(PaperBase):
+    """Model for paper API responses."""
+    domain: str
+    citation_count: int = Field(default=0, ge=0)
+    quality_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    tldr: Optional[str] = None
+    relevance_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+    matching_aspects: List[str] = Field(default_factory=list)
+    
+    class Config:
+        from_attributes = True
+
+
+class PaperWithEmbedding(PaperResponse):
+    """Paper with embedding vector (for internal use)."""
+    embedding: Optional[List[float]] = None
+    embedding_model: Optional[str] = None
+
+
+class PaperSearchRequest(BaseModel):
+    """Request model for paper search."""
+    query: str = Field(..., min_length=1, max_length=200)
+    limit: int = Field(default=20, ge=1, le=100)
+    domain_filter: Optional[str] = None
+    min_year: Optional[int] = Field(None, ge=1900)
+    
+    
+class RecommendationRequest(BaseModel):
+    """Request model for paper recommendations."""
+    user_id: Optional[int] = None
+    count: int = Field(default=10, ge=1, le=50)
+    model_preference: Optional[str] = Field(
+        default="all-MiniLM-L6-v2",
+        description="Embedding model to use"
+    )
+    strategy: Optional[str] = Field(
+        default="personalized",
+        description="Recommendation strategy"
+    )
+    filters: Optional['RecommendationFilters'] = None
+    session_id: str = Field(..., description="Session tracking ID")
+    
+    model_config = {"protected_namespaces": ()}  # Disable Pydantic model_ namespace protection
+    
+    @validator('model_preference')
+    def validate_model(cls, v):
+        """Validate model name."""
+        allowed = ['all-MiniLM-L6-v2', 'specter2', 'auto','minilm','specter']
+        if v not in allowed:
+            raise ValueError(f"Model must be one of {allowed}")
         return v
     
-    class Config:
-        """Pydantic configuration."""
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "paper_id": "arxiv:2401.12345",
-                "title": "Deep Learning for Protein Structure Prediction",
-                "authors": ["Smith, J.", "Johnson, A.", "Williams, B."],
-                "year": 2024,
-                "venue": "Nature",
-                "citation_count": 156,
-                "domain": "healthcare"
-            }
-        }
-
-
-class Paper(BaseModel):
-    """
-    Complete paper with full content.
-    
-    Attributes:
-        paper_id: Unique paper identifier
-        title: Paper title
-        authors: List of author names
-        year: Publication year
-        venue: Publication venue
-        citation_count: Number of citations
-        abstract: Paper abstract
-        summary: AI-generated summary
-        introduction: Introduction section text
-        gcs_pdf_path: Google Cloud Storage path to PDF
-        domain: Research domain
-        ingested_at: When paper was ingested
-        updated_at: Last update timestamp
-    """
-    
-    paper_id: str = Field(
-        ...,
-        description="Unique paper identifier"
-    )
-    
-    title: str = Field(
-        ...,
-        min_length=1,
-        description="Paper title"
-    )
-    
-    authors: List[str] = Field(
-        default_factory=list,
-        description="List of author names"
-    )
-    
-    year: int = Field(
-        ...,
-        ge=1900,
-        le=2030,
-        description="Publication year"
-    )
-    
-    venue: Optional[str] = Field(
-        None,
-        description="Publication venue"
-    )
-    
-    citation_count: int = Field(
-        default=0,
-        ge=0,
-        description="Number of citations"
-    )
-    
-    abstract: str = Field(
-        ...,
-        min_length=1,
-        description="Paper abstract"
-    )
-    
-    summary: Optional[str] = Field(
-        None,
-        description="AI-generated summary"
-    )
-    
-    introduction: Optional[str] = Field(
-        None,
-        description="Introduction section"
-    )
-    
-    gcs_pdf_path: Optional[str] = Field(
-        None,
-        max_length=500,
-        description="Google Cloud Storage PDF path"
-    )
-    
-    domain: str = Field(
-        ...,
-        description="Research domain"
-    )
-    
-    ingested_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Ingestion timestamp"
-    )
-    
-    updated_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Last update timestamp"
-    )
-    
-    @validator('domain')
-    def validate_domain(cls, v: str) -> str:
-        """Validate domain is one of allowed values."""
-        allowed_domains = ['healthcare', 'fintech', 'quantum_computing']
-        if v not in allowed_domains:
-            logger.error(f"Invalid domain: {v}")
-            raise ValueError(f"Domain must be one of {allowed_domains}")
+    @validator('strategy')
+    def validate_strategy(cls, v):
+        """Validate strategy name."""
+        allowed = ['personalized', 'canonical', 'trending']
+        if v not in allowed:
+            raise ValueError(f"Strategy must be one of {allowed}")
         return v
-    
-    class Config:
-        """Pydantic configuration."""
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "paper_id": "arxiv:2401.12345",
-                "title": "AlphaFold: Improved protein structure prediction",
-                "authors": ["Jumper, J.", "Evans, R.", "Pritzel, A."],
-                "year": 2021,
-                "venue": "Nature",
-                "citation_count": 9432,
-                "abstract": "Proteins are essential to life...",
-                "summary": "This paper presents AlphaFold 2...",
-                "introduction": "Recent advances in deep learning...",
-                "gcs_pdf_path": "papers/arxiv/2401.12345.pdf",
-                "domain": "healthcare",
-                "ingested_at": "2025-11-01T10:00:00",
-                "updated_at": "2025-11-08T10:00:00"
-            }
-        }
 
 
-class PaperEmbedding(BaseModel):
-    """
-    Paper embedding vector.
+class RecommendationFilters(BaseModel):
+    """Filters for recommendations."""
+    min_year: Optional[int] = Field(None, ge=1900)
+    max_year: Optional[int] = Field(None, le=2030)
+    domains: Optional[List[str]] = None
+    exclude_paper_ids: Optional[List[str]] = None
     
-    SPECTER embedding for semantic similarity search.
-    
-    Attributes:
-        paper_id: Unique paper identifier
-        embedding_vector: 768-dimensional embedding vector
-        model_name: Name of embedding model used
-        created_at: When embedding was generated
-    """
-    
-    paper_id: str = Field(
-        ...,
-        description="Paper identifier"
-    )
-    
-    embedding_vector: List[float] = Field(
-        ...,
-        description="768-dimensional embedding vector"
-    )
-    
-    model_name: str = Field(
-        default="allenai/specter",
-        description="Embedding model name"
-    )
-    
-    created_at: datetime = Field(
-        default_factory=datetime.utcnow,
-        description="Creation timestamp"
-    )
-    
-    @validator('embedding_vector')
-    def validate_embedding_dimension(cls, v: List[float]) -> List[float]:
-        """Validate embedding has correct dimension."""
-        if len(v) != 768:
-            logger.error(f"Invalid embedding dimension: {len(v)}")
-            raise ValueError("Embedding must be 768-dimensional")
+    @validator('max_year')
+    def validate_year_range(cls, v, values):
+        """Ensure max_year >= min_year."""
+        if 'min_year' in values and values['min_year'] and v:
+            if v < values['min_year']:
+                raise ValueError("max_year must be >= min_year")
         return v
-    
-    class Config:
-        """Pydantic configuration."""
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "paper_id": "arxiv:2401.12345",
-                "embedding_vector": [0.1] * 768,
-                "model_name": "allenai/specter",
-                "created_at": "2025-11-08T10:00:00"
-            }
-        }
 
 
-class PaperWithScore(PaperMetadata):
-    """
-    Paper metadata with relevance/similarity score.
+class RecommendationMetadata(BaseModel):
+    """Metadata about recommendation generation."""
+    user_stage: str
+    strategy_used: str
+    model_used: str
+    evaluation_scores: 'EvaluationScores'
+    cache_hit: bool
+    generation_time_ms: float
     
-    Used for search results and recommendations.
-    
-    Attributes:
-        All attributes from PaperMetadata plus:
-        relevance_score: Relevance/similarity score (0.0-1.0)
-        match_explanation: Explanation of why paper matches
-    """
-    
-    relevance_score: float = Field(
+    model_config = {"protected_namespaces": ()}  # Disable Pydantic model_ namespace protection
+
+
+class EvaluationScores(BaseModel):
+    """Evaluation metrics for recommendations."""
+    profile_alignment: Optional[float] = Field(None, ge=0.0, le=1.0)
+    ground_truth_quality: Optional[float] = Field(None, ge=0.0, le=1.0)
+    combined_score: Optional[float] = Field(None, ge=0.0, le=1.0)
+
+
+class RecommendationResponse(BaseModel):
+    """Response model for recommendations."""
+    recommendations: List[PaperResponse]
+    metadata: RecommendationMetadata
+    explanations: dict[str, str] = Field(
+        default_factory=dict,
+        description="Why each paper was recommended"
+    )
+
+
+class PaperInteractionRequest(BaseModel):
+    """Request model for tracking paper interactions."""
+    paper_id: str
+    interaction_type: str = Field(
         ...,
-        ge=0.0,
-        le=1.0,
-        description="Relevance score (0.0-1.0)"
+        description="Type of interaction"
     )
+    duration_seconds: Optional[int] = Field(None, ge=0)
+    context: Optional['InteractionContext'] = None
     
-    match_explanation: Optional[dict] = Field(
-        None,
-        description="Explanation of match"
-    )
-    
-    class Config:
-        """Pydantic configuration."""
-        from_attributes = True
-        json_schema_extra = {
-            "example": {
-                "paper_id": "arxiv:2401.12345",
-                "title": "Deep Learning for Healthcare",
-                "authors": ["Smith, J."],
-                "year": 2024,
-                "venue": "Nature",
-                "citation_count": 100,
-                "domain": "healthcare",
-                "relevance_score": 0.89,
-                "match_explanation": {
-                    "semantic_similarity": 0.89,
-                    "keyword_matches": ["deep learning", "healthcare"],
-                    "confidence": "high"
-                }
-            }
-        }
+    @validator('interaction_type')
+    def validate_interaction_type(cls, v):
+        """Validate interaction type."""
+        allowed = [
+            'view', 'click', 'save', 'like', 
+            'download', 'cite', 'dismiss', 'not_interested'
+        ]
+        if v not in allowed:
+            raise ValueError(f"Interaction type must be one of {allowed}")
+        return v
 
 
-# Initialize module logger
-logger.info("Paper models module loaded successfully")
+class InteractionContext(BaseModel):
+    """Context about where interaction occurred."""
+    source: str = Field(..., description="Where interaction happened")
+    position: Optional[int] = Field(None, ge=0, description="Position in list")
+    session_id: str
+    
+    @validator('source')
+    def validate_source(cls, v):
+        """Validate source."""
+        allowed = ['recommendation', 'search', 'citation_graph']
+        if v not in allowed:
+            raise ValueError(f"Source must be one of {allowed}")
+        return v
+
+
+# Update forward references
+RecommendationRequest.update_forward_refs()
+PaperInteractionRequest.update_forward_refs()

@@ -1,0 +1,1118 @@
+# CiteConnect Backend - Comprehensive Testing Guide
+
+## 🎯 Testing Overview
+
+This guide provides step-by-step testing procedures for the CiteConnect backend, organized by what can be tested **now** (without paper data) versus **later** (after data is loaded).
+
+---
+
+## ✅ Phase 1: Infrastructure & User Management (Test NOW)
+
+### Test 1.1: Health Check (2 minutes)
+
+```bash
+# Basic health check
+curl http://localhost:8000/health
+
+# Expected response:
+{
+  "status": "healthy",
+  "version": "1.0.0",
+  "environment": "production",
+  "checks": {
+    "database": "healthy",
+    "models": {
+      "all-MiniLM-L6-v2": "healthy",
+      "specter2": "healthy"
+    }
+  }
+}
+
+# Test API root
+curl http://localhost:8000/
+
+# Open Swagger documentation
+open http://localhost:8000/docs
+```
+
+**Success Criteria:**
+- ✅ Health endpoint returns 200 OK
+- ✅ Database shows "healthy"
+- ✅ Models show "healthy"
+- ✅ Swagger docs load properly
+
+---
+
+### Test 1.2: User Registration (5 minutes)
+
+#### Create Test Users Across All Domains
+
+**User 1: Healthcare PhD Student**
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "healthcare.phd@test.com",
+    "password": "HealthPass123!",
+    "full_name": "Dr. Sarah Chen"
+  }'
+
+# Save the response
+# Export token: export TOKEN1="<access_token>"
+```
+
+**User 2: Fintech Industry Professional**
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "fintech.pro@test.com",
+    "password": "FintechPass123!",
+    "full_name": "John Goldman"
+  }'
+
+# Export token: export TOKEN2="<access_token>"
+```
+
+**User 3: Quantum Computing Undergraduate**
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "quantum.student@test.com",
+    "password": "QuantumPass123!",
+    "full_name": "Alice Quantum"
+  }'
+
+# Export token: export TOKEN3="<access_token>"
+```
+
+**User 4: Postdoc Researcher**
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "postdoc@test.com",
+    "password": "PostdocPass123!",
+    "full_name": "Bob Research"
+  }'
+
+# Export token: export TOKEN4="<access_token>"
+```
+
+**Success Criteria:**
+- ✅ Each returns `user_id` (1, 2, 3, 4...)
+- ✅ `access_token` provided
+- ✅ `message` confirms successful registration
+- ✅ Check database: Users appear in `users` table
+
+---
+
+### Test 1.3: Profile Creation with Different Completeness Levels (10 minutes)
+
+#### Minimal Profile (Completeness ~0.4)
+```bash
+curl -X POST http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "healthcare",
+    "reading_level": "advanced",
+    "interests": ["medical imaging", "deep learning", "diagnostics"]
+  }'
+
+# Check completeness score in response
+```
+
+#### Medium Profile (Completeness ~0.6-0.8)
+```bash
+curl -X POST http://localhost:8000/api/v1/users/2/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "research_stage": "industry",
+    "primary_domain": "fintech",
+    "reading_level": "intermediate",
+    "interests": ["algorithmic trading", "risk management", "machine learning"],
+    "sub_domains": ["derivatives", "high frequency trading"],
+    "research_goals": ["industry_application", "learn_basics"],
+    "years_experience": 5
+  }'
+```
+
+#### Complete Profile (Completeness ~1.0)
+```bash
+curl -X POST http://localhost:8000/api/v1/users/3/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "research_stage": "undergraduate",
+    "primary_domain": "quantum_computing",
+    "reading_level": "introductory",
+    "interests": ["quantum algorithms", "quantum error correction", "qubits"],
+    "sub_domains": ["quantum gates", "quantum annealing"],
+    "research_methods": ["simulation", "theory"],
+    "research_goals": ["learn_basics", "publish_paper"],
+    "time_availability": "part_time_researcher",
+    "years_experience": 1,
+    "h_index": 0,
+    "prefers_recent_papers": true,
+    "prefers_high_impact": false,
+    "prefers_open_access": true,
+    "preferred_venues": ["Nature Quantum", "Physical Review"],
+    "institution": "MIT",
+    "department": "Physics",
+    "looking_for_collaborators": true
+  }'
+```
+
+**Success Criteria:**
+- ✅ Minimal profile: `profile_completeness` ~0.4-0.6
+- ✅ Medium profile: `profile_completeness` ~0.6-0.8
+- ✅ Complete profile: `profile_completeness` ~0.8-1.0
+- ✅ All interests saved to `user_interest_hierarchy` table
+- ✅ Interests returned in grouped format (level_1, level_2, level_3)
+
+---
+
+### Test 1.4: Profile Retrieval (3 minutes)
+
+```bash
+# Get each profile
+curl http://localhost:8000/api/v1/users/1/profile | jq '.'
+curl http://localhost:8000/api/v1/users/2/profile | jq '.'
+curl http://localhost:8000/api/v1/users/3/profile | jq '.'
+
+# Get interests separately
+curl http://localhost:8000/api/v1/users/1/interests | jq '.'
+```
+
+**Success Criteria:**
+- ✅ Profile returned with all fields
+- ✅ `interests` object contains level_1, level_2, level_3, all
+- ✅ `profile_completeness` is calculated correctly
+- ✅ All arrays (sub_domains, research_goals) returned properly
+
+---
+
+### Test 1.5: Profile Updates (5 minutes)
+
+#### Update Profile Fields
+```bash
+curl -X PUT http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "years_experience": 4,
+    "h_index": 3,
+    "institution": "Stanford Medical School",
+    "department": "Radiology"
+  }'
+```
+
+#### Update Interests
+```bash
+curl -X PUT http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "interests": ["computer vision", "neural networks", "medical AI", "radiology"]
+  }'
+
+# Verify interests were replaced
+curl http://localhost:8000/api/v1/users/1/interests
+```
+
+**Success Criteria:**
+- ✅ Fields updated correctly
+- ✅ `updated_at` timestamp changes
+- ✅ Old interests replaced with new ones
+- ✅ `profile_completeness` recalculated (auto by database)
+
+---
+
+### Test 1.6: State Management (3 minutes)
+
+```bash
+# Check initial states (should all be cold_start)
+curl http://localhost:8000/api/v1/users/1/state | jq '.state.recommendation_stage'
+curl http://localhost:8000/api/v1/users/2/state | jq '.state.recommendation_stage'
+curl http://localhost:8000/api/v1/users/3/state | jq '.state.recommendation_stage'
+
+# All should return: "cold_start"
+```
+
+**Success Criteria:**
+- ✅ All users start in `cold_start` stage
+- ✅ `interaction_count` is 0
+- ✅ `preferred_model` is null
+- ✅ Timestamps are set correctly
+
+---
+
+### Test 1.7: Authentication (5 minutes)
+
+#### Test Login with Correct Credentials
+```bash
+curl -X POST http://localhost:8000/api/v1/users/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "healthcare.phd@test.com",
+    "password": "HealthPass123!"
+  }'
+
+# Should return access_token
+```
+
+#### Test Login with Wrong Password
+```bash
+curl -X POST http://localhost:8000/api/v1/users/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "healthcare.phd@test.com",
+    "password": "WrongPassword!"
+  }'
+
+# Should return 401 Unauthorized
+```
+
+#### Test Login with Non-existent Email
+```bash
+curl -X POST http://localhost:8000/api/v1/users/login \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "nonexistent@test.com",
+    "password": "AnyPassword123!"
+  }'
+
+# Should return 401 Unauthorized
+```
+
+**Success Criteria:**
+- ✅ Valid credentials return token
+- ✅ Invalid credentials return 401
+- ✅ Non-existent email returns 401
+- ✅ Inactive accounts return 403
+
+---
+
+## ❌ Phase 2: Negative Testing (Test NOW - 10 minutes)
+
+### Test 2.1: Invalid Domain
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/10/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "machine_learning",
+    "reading_level": "advanced",
+    "interests": ["ml", "ai", "cv"]
+  }'
+
+# Expected: 422 Validation Error
+# Message: "Domain must be one of ['healthcare', 'fintech', 'quantum_computing']"
+```
+
+### Test 2.2: Invalid Reading Level
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/10/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "healthcare",
+    "reading_level": "beginner",
+    "interests": ["ml", "ai", "cv"]
+  }'
+
+# Expected: 422 Validation Error
+# Message: "Reading level must be one of ['introductory', 'intermediate', 'advanced', 'expert']"
+```
+
+### Test 2.3: Too Few Interests
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/10/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "healthcare",
+    "reading_level": "advanced",
+    "interests": ["ml", "ai"]
+  }'
+
+# Expected: 422 Validation Error
+# Message: "ensure this value has at least 3 items"
+```
+
+### Test 2.4: Too Many Research Goals
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/10/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "healthcare",
+    "reading_level": "advanced",
+    "interests": ["ml", "ai", "cv"],
+    "research_goals": ["goal1", "goal2", "goal3", "goal4", "goal5", "goal6"]
+  }'
+
+# Expected: 422 Validation Error or database constraint error
+# Schema allows max 5 research_goals
+```
+
+### Test 2.5: Duplicate Email Registration
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "healthcare.phd@test.com",
+    "password": "AnyPass123!",
+    "full_name": "Duplicate User"
+  }'
+
+# Expected: 400 Bad Request
+# Message: "Email already registered"
+```
+
+### Test 2.6: Weak Password
+
+```bash
+curl -X POST http://localhost:8000/api/v1/users/register \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "weak@test.com",
+    "password": "weakpass",
+    "full_name": "Weak Password User"
+  }'
+
+# Expected: 422 Validation Error
+# Message: "Password must contain uppercase letter" or similar
+```
+
+**Success Criteria for Negative Tests:**
+- ✅ All invalid inputs rejected with 422 status
+- ✅ Clear error messages returned
+- ✅ Database remains clean (no invalid data inserted)
+
+---
+
+## 🗄️ Phase 3: Database Integrity Checks (Test NOW - 10 minutes)
+
+### Test 3.1: Verify Data in Supabase
+
+Run these queries in **Supabase SQL Editor**:
+
+#### Check Users
+```sql
+SELECT 
+    user_id, 
+    email, 
+    name, 
+    is_active,
+    created_at
+FROM users
+ORDER BY user_id;
+
+-- Should see all registered users
+```
+
+#### Check Profiles with Completeness
+```sql
+SELECT 
+    user_id,
+    research_stage,
+    primary_domain,
+    reading_level,
+    years_experience,
+    h_index,
+    profile_completeness,
+    created_at
+FROM user_profiles_extended
+ORDER BY user_id;
+
+-- Check that completeness scores are correct (0.4 to 1.0)
+```
+
+#### Check Interest Hierarchy
+```sql
+SELECT 
+    user_id,
+    interest_level,
+    interest_term,
+    confidence_score,
+    source
+FROM user_interest_hierarchy
+ORDER BY user_id, interest_level, interest_term;
+
+-- All should have:
+-- - interest_level = 1 (broad)
+-- - confidence_score = 1.0
+-- - source = 'explicit'
+```
+
+#### Check Recommendation States
+```sql
+SELECT 
+    user_id,
+    recommendation_stage,
+    interaction_count,
+    last_embedding_update_minilm,
+    created_at
+FROM user_recommendation_state
+ORDER BY user_id;
+
+-- All should have:
+-- - recommendation_stage = 'cold_start'
+-- - interaction_count = 0
+```
+
+#### Join Query - Complete User View
+```sql
+SELECT 
+    u.user_id,
+    u.email,
+    u.name,
+    p.research_stage,
+    p.primary_domain,
+    p.reading_level,
+    p.profile_completeness,
+    urs.recommendation_stage,
+    urs.interaction_count,
+    COUNT(uih.interest_term) as total_interests
+FROM users u
+LEFT JOIN user_profiles_extended p ON u.user_id = p.user_id
+LEFT JOIN user_recommendation_state urs ON u.user_id = urs.user_id
+LEFT JOIN user_interest_hierarchy uih ON u.user_id = uih.user_id
+GROUP BY 
+    u.user_id, u.email, u.name, 
+    p.research_stage, p.primary_domain, p.reading_level, p.profile_completeness,
+    urs.recommendation_stage, urs.interaction_count
+ORDER BY u.user_id;
+
+-- Verify all relationships are correct
+```
+
+---
+
+### Test 3.2: Verify Using Python Script
+
+```bash
+# Run database verification
+docker-compose exec api python -c "
+import asyncio
+from app.db.connection import db
+
+async def verify():
+    await db.connect()
+    
+    print('\n' + '='*60)
+    print('DATABASE VERIFICATION')
+    print('='*60)
+    
+    # Check users
+    users = await db.fetch('SELECT COUNT(*) as count FROM users')
+    print(f'\n📊 Users: {users[0][\"count\"]}')
+    
+    # Check profiles
+    profiles = await db.fetch('SELECT COUNT(*) as count FROM user_profiles_extended')
+    print(f'📊 Profiles: {profiles[0][\"count\"]}')
+    
+    # Check interests
+    interests = await db.fetch('SELECT COUNT(*) as count FROM user_interest_hierarchy')
+    print(f'📊 Total Interests: {interests[0][\"count\"]}')
+    
+    # Check states
+    states = await db.fetch('SELECT COUNT(*) as count FROM user_recommendation_state')
+    print(f'📊 States: {states[0][\"count\"]}')
+    
+    # Check completeness distribution
+    completeness = await db.fetch('''
+        SELECT 
+            AVG(profile_completeness) as avg,
+            MIN(profile_completeness) as min,
+            MAX(profile_completeness) as max
+        FROM user_profiles_extended
+    ''')
+    
+    if completeness[0]['avg']:
+        print(f'\n📈 Profile Completeness:')
+        print(f'   Average: {completeness[0][\"avg\"]:.2f}')
+        print(f'   Min: {completeness[0][\"min\"]:.2f}')
+        print(f'   Max: {completeness[0][\"max\"]:.2f}')
+    
+    print('\n' + '='*60)
+    
+    await db.disconnect()
+
+asyncio.run(verify())
+"
+```
+
+**Success Criteria:**
+- ✅ User count matches registrations
+- ✅ Profile count matches user count
+- ✅ Interest count >= 3 × user count
+- ✅ State count matches user count
+- ✅ Average completeness > 0.5
+
+---
+
+## 🔄 Phase 4: Update & Retrieval Testing (Test NOW - 10 minutes)
+
+### Test 4.1: Update Profile Fields
+
+```bash
+# Update user 1's profile
+curl -X PUT http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "years_experience": 5,
+    "h_index": 3,
+    "institution": "Stanford Medical School",
+    "department": "Radiology",
+    "looking_for_collaborators": true
+  }'
+
+# Verify update
+curl http://localhost:8000/api/v1/users/1/profile | jq '.profile | {years_experience, h_index, institution}'
+```
+
+### Test 4.2: Update Interests
+
+```bash
+# Replace interests for user 2
+curl -X PUT http://localhost:8000/api/v1/users/2/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "interests": ["blockchain", "defi", "smart contracts", "cryptocurrency"]
+  }'
+
+# Verify old interests are gone, new ones added
+curl http://localhost:8000/api/v1/users/2/interests | jq '.interests.level_1'
+
+# Should show new interests only
+```
+
+### Test 4.3: Partial Updates
+
+```bash
+# Update only one field
+curl -X PUT http://localhost:8000/api/v1/users/3/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "time_availability": "full_time_researcher"
+  }'
+
+# Verify other fields unchanged
+curl http://localhost:8000/api/v1/users/3/profile | jq '.profile.time_availability'
+```
+
+**Success Criteria:**
+- ✅ Updates apply correctly
+- ✅ Other fields remain unchanged
+- ✅ `updated_at` timestamp changes
+- ✅ Interest replacement works
+
+---
+
+## 🚫 Phase 5: Error Handling & Edge Cases (Test NOW - 10 minutes)
+
+### Test 5.1: Non-existent User
+
+```bash
+curl http://localhost:8000/api/v1/users/999/profile
+
+# Expected: 404 Not Found
+```
+
+### Test 5.2: Create Profile Twice
+
+```bash
+# Try to create profile for user 1 again
+curl -X POST http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "healthcare",
+    "reading_level": "advanced",
+    "interests": ["ml", "ai", "cv"]
+  }'
+
+# Expected: 400 Bad Request
+# Message: "Profile already exists. Use PUT to update."
+```
+
+### Test 5.3: Missing Required Fields
+
+```bash
+# Missing primary_domain
+curl -X POST http://localhost:8000/api/v1/users/5/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "reading_level": "advanced",
+    "interests": ["ml", "ai", "cv"]
+  }'
+
+# Expected: 422 Validation Error
+
+# Missing reading_level
+curl -X POST http://localhost:8000/api/v1/users/5/profile \
+  -H "Content-Type: application/json" \
+  -d '{
+    "primary_domain": "healthcare",
+    "interests": ["ml", "ai", "cv"]
+  }'
+
+# Expected: 422 Validation Error
+```
+
+### Test 5.4: Empty Update
+
+```bash
+curl -X PUT http://localhost:8000/api/v1/users/1/profile \
+  -H "Content-Type: application/json" \
+  -d '{}'
+
+# Expected: 400 Bad Request
+# Message: "No fields to update"
+```
+
+**Success Criteria:**
+- ✅ All errors return appropriate status codes
+- ✅ Error messages are clear and helpful
+- ✅ No crashes or 500 errors
+- ✅ Database stays consistent
+
+---
+
+## 📊 Phase 6: Comprehensive Verification Script (Test NOW - 5 minutes)
+
+Run this automated verification:
+
+```bash
+docker-compose exec api python -c "
+import asyncio
+from app.db.connection import db
+
+async def comprehensive_check():
+    await db.connect()
+    
+    print('\n' + '='*70)
+    print('COMPREHENSIVE DATABASE VERIFICATION')
+    print('='*70)
+    
+    # 1. User Statistics
+    print('\n1️⃣ USER STATISTICS:')
+    total_users = await db.fetchval('SELECT COUNT(*) FROM users')
+    active_users = await db.fetchval('SELECT COUNT(*) FROM users WHERE is_active = true')
+    print(f'   Total Users: {total_users}')
+    print(f'   Active Users: {active_users}')
+    
+    # 2. Profile Statistics
+    print('\n2️⃣ PROFILE STATISTICS:')
+    total_profiles = await db.fetchval('SELECT COUNT(*) FROM user_profiles_extended')
+    
+    by_domain = await db.fetch('''
+        SELECT primary_domain, COUNT(*) as count
+        FROM user_profiles_extended
+        GROUP BY primary_domain
+        ORDER BY count DESC
+    ''')
+    
+    print(f'   Total Profiles: {total_profiles}')
+    print('   By Domain:')
+    for row in by_domain:
+        print(f'     - {row[\"primary_domain\"]}: {row[\"count\"]} users')
+    
+    avg_completeness = await db.fetchval('''
+        SELECT AVG(profile_completeness) 
+        FROM user_profiles_extended
+    ''')
+    print(f'   Average Completeness: {avg_completeness:.2f}')
+    
+    # 3. Interest Statistics
+    print('\n3️⃣ INTEREST STATISTICS:')
+    total_interests = await db.fetchval('SELECT COUNT(*) FROM user_interest_hierarchy')
+    
+    by_level = await db.fetch('''
+        SELECT interest_level, COUNT(*) as count
+        FROM user_interest_hierarchy
+        GROUP BY interest_level
+        ORDER BY interest_level
+    ''')
+    
+    print(f'   Total Interests: {total_interests}')
+    print('   By Level:')
+    for row in by_level:
+        print(f'     - Level {row[\"interest_level\"]}: {row[\"count\"]} interests')
+    
+    # 4. State Statistics
+    print('\n4️⃣ STATE STATISTICS:')
+    by_stage = await db.fetch('''
+        SELECT recommendation_stage, COUNT(*) as count
+        FROM user_recommendation_state
+        GROUP BY recommendation_stage
+        ORDER BY count DESC
+    ''')
+    
+    print('   By Stage:')
+    for row in by_stage:
+        print(f'     - {row[\"recommendation_stage\"]}: {row[\"count\"]} users')
+    
+    # 5. Data Integrity Checks
+    print('\n5️⃣ DATA INTEGRITY:')
+    
+    # Users without profiles
+    users_no_profile = await db.fetchval('''
+        SELECT COUNT(*) FROM users u
+        WHERE NOT EXISTS (
+            SELECT 1 FROM user_profiles_extended p
+            WHERE p.user_id = u.user_id
+        )
+    ''')
+    
+    # Users without states
+    users_no_state = await db.fetchval('''
+        SELECT COUNT(*) FROM users u
+        WHERE NOT EXISTS (
+            SELECT 1 FROM user_recommendation_state s
+            WHERE s.user_id = u.user_id
+        )
+    ''')
+    
+    # Profiles without interests
+    profiles_no_interests = await db.fetchval('''
+        SELECT COUNT(*) FROM user_profiles_extended p
+        WHERE NOT EXISTS (
+            SELECT 1 FROM user_interest_hierarchy i
+            WHERE i.user_id = p.user_id
+        )
+    ''')
+    
+    if users_no_profile > 0:
+        print(f'   ⚠️  Users without profiles: {users_no_profile}')
+    else:
+        print(f'   ✅ All users have profiles')
+    
+    if users_no_state > 0:
+        print(f'   ⚠️  Users without states: {users_no_state}')
+    else:
+        print(f'   ✅ All users have recommendation states')
+    
+    if profiles_no_interests > 0:
+        print(f'   ⚠️  Profiles without interests: {profiles_no_interests}')
+    else:
+        print(f'   ✅ All profiles have interests')
+    
+    print('\n' + '='*70)
+    print('✅ VERIFICATION COMPLETE')
+    print('='*70 + '\n')
+    
+    await db.disconnect()
+
+asyncio.run(comprehensive_check())
+"
+```
+
+---
+
+## 📝 Phase 7: Automated Test Script (Test NOW)
+
+Create this comprehensive test script:
+
+```bash
+# Save as: test_complete_flow.sh
+#!/bin/bash
+
+set -e  # Exit on error
+
+echo "🧪 CiteConnect Complete Testing Suite"
+echo "======================================"
+
+BASE_URL="http://localhost:8000/api/v1"
+HEALTH_URL="http://localhost:8000/health"
+
+# Colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+test_health() {
+    echo -e "\n${GREEN}Test 1: Health Check${NC}"
+    HEALTH=$(curl -s $HEALTH_URL)
+    STATUS=$(echo $HEALTH | jq -r '.status')
+    
+    if [ "$STATUS" = "healthy" ]; then
+        echo "✅ Health check passed"
+    else
+        echo "❌ Health check failed"
+        exit 1
+    fi
+}
+
+test_registration() {
+    echo -e "\n${GREEN}Test 2: User Registration${NC}"
+    
+    RESPONSE=$(curl -s -X POST $BASE_URL/users/register \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "autotest@example.com",
+        "password": "AutoTest123!",
+        "full_name": "Auto Test User"
+      }')
+    
+    USER_ID=$(echo $RESPONSE | jq -r '.user_id')
+    TOKEN=$(echo $RESPONSE | jq -r '.access_token')
+    
+    if [ "$USER_ID" != "null" ] && [ "$TOKEN" != "null" ]; then
+        echo "✅ Registration successful - User ID: $USER_ID"
+        echo "$USER_ID" > /tmp/test_user_id
+        echo "$TOKEN" > /tmp/test_token
+    else
+        echo "❌ Registration failed"
+        echo $RESPONSE | jq '.'
+        exit 1
+    fi
+}
+
+test_profile_creation() {
+    echo -e "\n${GREEN}Test 3: Profile Creation${NC}"
+    
+    USER_ID=$(cat /tmp/test_user_id)
+    
+    PROFILE_RESPONSE=$(curl -s -X POST $BASE_URL/users/$USER_ID/profile \
+      -H "Content-Type: application/json" \
+      -d '{
+        "research_stage": "phd",
+        "primary_domain": "healthcare",
+        "reading_level": "advanced",
+        "interests": ["machine learning", "medical imaging", "diagnostics"],
+        "sub_domains": ["radiology"],
+        "research_goals": ["publish_paper"],
+        "years_experience": 3
+      }')
+    
+    COMPLETENESS=$(echo $PROFILE_RESPONSE | jq -r '.profile.profile_completeness')
+    
+    if [ "$COMPLETENESS" != "null" ]; then
+        echo "✅ Profile created - Completeness: $COMPLETENESS"
+    else
+        echo "❌ Profile creation failed"
+        echo $PROFILE_RESPONSE | jq '.'
+        exit 1
+    fi
+}
+
+test_profile_retrieval() {
+    echo -e "\n${GREEN}Test 4: Profile Retrieval${NC}"
+    
+    USER_ID=$(cat /tmp/test_user_id)
+    
+    PROFILE=$(curl -s $BASE_URL/users/$USER_ID/profile)
+    DOMAIN=$(echo $PROFILE | jq -r '.profile.primary_domain')
+    INTEREST_COUNT=$(echo $PROFILE | jq -r '.profile.interests.all | length')
+    
+    if [ "$DOMAIN" = "healthcare" ] && [ "$INTEREST_COUNT" -ge 3 ]; then
+        echo "✅ Profile retrieval successful"
+        echo "   Domain: $DOMAIN"
+        echo "   Interests: $INTEREST_COUNT"
+    else
+        echo "❌ Profile retrieval failed"
+        exit 1
+    fi
+}
+
+test_state_check() {
+    echo -e "\n${GREEN}Test 5: State Management${NC}"
+    
+    USER_ID=$(cat /tmp/test_user_id)
+    
+    STATE=$(curl -s $BASE_URL/users/$USER_ID/state)
+    STAGE=$(echo $STATE | jq -r '.state.recommendation_stage')
+    INTERACTIONS=$(echo $STATE | jq -r '.state.interaction_count')
+    
+    if [ "$STAGE" = "cold_start" ] && [ "$INTERACTIONS" -eq 0 ]; then
+        echo "✅ State check passed"
+        echo "   Stage: $STAGE"
+        echo "   Interactions: $INTERACTIONS"
+    else
+        echo "❌ State check failed"
+        exit 1
+    fi
+}
+
+test_profile_update() {
+    echo -e "\n${GREEN}Test 6: Profile Update${NC}"
+    
+    USER_ID=$(cat /tmp/test_user_id)
+    
+    UPDATE_RESPONSE=$(curl -s -X PUT $BASE_URL/users/$USER_ID/profile \
+      -H "Content-Type: application/json" \
+      -d '{
+        "h_index": 5,
+        "institution": "Test University"
+      }')
+    
+    H_INDEX=$(echo $UPDATE_RESPONSE | jq -r '.profile.h_index')
+    INSTITUTION=$(echo $UPDATE_RESPONSE | jq -r '.profile.institution')
+    
+    if [ "$H_INDEX" -eq 5 ] && [ "$INSTITUTION" = "Test University" ]; then
+        echo "✅ Profile update successful"
+    else
+        echo "❌ Profile update failed"
+        exit 1
+    fi
+}
+
+test_login() {
+    echo -e "\n${GREEN}Test 7: Login${NC}"
+    
+    LOGIN_RESPONSE=$(curl -s -X POST $BASE_URL/users/login \
+      -H "Content-Type: application/json" \
+      -d '{
+        "email": "autotest@example.com",
+        "password": "AutoTest123!"
+      }')
+    
+    NEW_TOKEN=$(echo $LOGIN_RESPONSE | jq -r '.access_token')
+    
+    if [ "$NEW_TOKEN" != "null" ]; then
+        echo "✅ Login successful"
+    else
+        echo "❌ Login failed"
+        exit 1
+    fi
+}
+
+test_invalid_domain() {
+    echo -e "\n${GREEN}Test 8: Invalid Domain Validation${NC}"
+    
+    RESPONSE=$(curl -s -X POST $BASE_URL/users/999/profile \
+      -H "Content-Type: application/json" \
+      -d '{
+        "primary_domain": "invalid_domain",
+        "reading_level": "advanced",
+        "interests": ["ml", "ai", "cv"]
+      }')
+    
+    # Should contain error about valid domains
+    if echo "$RESPONSE" | grep -q "healthcare\|fintech\|quantum_computing"; then
+        echo "✅ Domain validation working"
+    else
+        echo "❌ Domain validation not working"
+        echo $RESPONSE | jq '.'
+    fi
+}
+
+# Cleanup function
+cleanup() {
+    rm -f /tmp/test_user_id /tmp/test_token
+}
+
+trap cleanup EXIT
+
+# Run all tests
+test_health
+test_registration
+test_profile_creation
+test_profile_retrieval
+test_state_check
+test_profile_update
+test_login
+test_invalid_domain
+
+echo -e "\n${GREEN}======================================"
+echo "✅ ALL TESTS PASSED!"
+echo "======================================${NC}\n"
+
+# Print summary
+USER_ID=$(cat /tmp/test_user_id)
+echo "Test User Created: ID=$USER_ID, Email=autotest@example.com"
+echo ""
+echo "Next Steps:"
+echo "1. Create more test users with different profiles"
+echo "2. Wait for paper data from teammate"
+echo "3. Run: docker-compose exec api python scripts/validate_data.py"
+echo "4. Run: docker-compose exec api python scripts/initialize_ground_truth.py"
+echo "5. Test recommendations!"
+echo ""
+```
+
+### Run the Test Script
+
+```bash
+chmod +x test_complete_flow.sh
+./test_complete_flow.sh
+```
+
+**Expected Output:**
+```
+🧪 CiteConnect Complete Testing Suite
+======================================
+
+Test 1: Health Check
+✅ Health check passed
+
+Test 2: User Registration
+✅ Registration successful - User ID: 5
+
+Test 3: Profile Creation
+✅ Profile created - Completeness: 0.80
+
+Test 4: Profile Retrieval
+✅ Profile retrieval successful
+   Domain: healthcare
+   Interests: 3
+
+Test 5: State Management
+✅ State check passed
+   Stage: cold_start
+   Interactions: 0
+
+Test 6: Profile Update
+✅ Profile update successful
+
+Test 7: Login
+✅ Login successful
+
+Test 8: Invalid Domain Validation
+✅ Domain validation working
+
+======================================
+✅ ALL TESTS PASSED!
+======================================
+```
+
+---
+
+## 🎯 Summary Checklist
+
+After running all tests, you should have:
+
+- ✅ 4-10 test users created
+- ✅ All users have profiles with completeness 0.4-1.0
+- ✅ 12-40 interests in hierarchy table
+- ✅ All users in cold_start state
+- ✅ All validations working
+- ✅ Authentication working
+- ✅ Updates working
+- ✅ No errors in logs
+
+---
+
+## 🚀 Next Phase: Waiting for Paper Data
+
+Once your teammate provides paper data:
+
+1. Run `scripts/validate_data.py` to verify data quality
+2. Run `scripts/initialize_ground_truth.py` to set up evaluation
+3. Test paper search endpoints
+4. Test recommendation generation
+5. Test interaction tracking
+6. Test state transitions
+
+**Send this to your teammate:**
+```
+✅ Backend fully tested and working!
+
+Ready for paper data. Need:
+- 100+ papers per domain (healthcare, fintech, quantum_computing)
+- Paper embeddings (384-dim) for all papers
+- Citation networks (reference_ids, citation_ids populated)
+
+Format details in: sample_data_format.md
+```
