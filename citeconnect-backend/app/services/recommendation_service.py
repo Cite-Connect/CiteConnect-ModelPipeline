@@ -528,6 +528,409 @@ class RecommendationService:
             'mitigation_policy': mitigation_policy,
         }
     
+    async def generate_search_augmented_recommendations(
+        self,
+        user_id: int,
+        search_query: str,
+        count: int = 10,
+        model: str = 'minilm',
+        scoring_weights: Optional[Dict[str, float]] = None
+    ) -> Dict[str, Any]:
+        """
+        Generate recommendations augmented by search query.
+        Uses hybrid approach: keyword + semantic + profile.
+        """
+        logger.info(
+            "Generating search-augmented recommendations",
+            user_id=user_id,
+            search_query=search_query[:100],
+            count=count,
+            model=model
+        )
+        
+        # Get user data
+        profile = await self.user_repo.get_profile(user_id)
+        if not profile:
+            raise ValueError(f"No profile found for user {user_id}")
+        
+        interests = await self.user_repo.get_user_interests(user_id)
+        
+        # Get user embedding
+        embeddings = await self.user_embedding_service.get_or_generate_user_embeddings(user_id)
+        
+        # Map model name
+        model_key_map = {
+            'all-MiniLM-L6-v2': 'minilm',
+            'minilm': 'minilm',
+            'specter': 'specter',
+            'specter2': 'specter'
+        }
+        embedding_key = model_key_map.get(model, 'minilm')
+        user_embedding = embeddings[embedding_key]
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 1: Keyword Search (Fast, Precise)
+        # ────────────────────────────────────────────────────────
+        logger.debug("Phase 1: Keyword search")
+        keyword_results_raw = await self.paper_repo.search_by_text(
+            search_text=search_query,
+            limit=50
+        )
+        
+        # FIX: Convert asyncpg.Record to dict FIRST
+        keyword_results = [dict(row) for row in keyword_results_raw]
+        max_relevance = max([p.get('relevance', 0) for p in keyword_results]) if keyword_results else 1.0
+        # Now we can modify
+        for paper in keyword_results:
+            paper['match_source'] = 'keyword'
+            raw_relevance = float(paper.get('relevance', 0))
+            paper['keyword_score'] = raw_relevance / max_relevance if max_relevance > 0 else 0.0
+            
+            # Title boost
+            title_lower = str(paper.get('title', '')).lower()
+            query_terms_clean = [t.lower() for t in search_query.split() if len(t) > 3]
+            title_matches = sum(1 for term in query_terms_clean if term in title_lower)
+            
+            if title_matches > 0 and query_terms_clean:
+                boost = min(title_matches / len(query_terms_clean), 1.0) * 0.4
+                paper['keyword_score'] = min(paper['keyword_score'] + boost, 1.0)
+        
+        logger.info(
+            "Keyword search complete",
+            results=len(keyword_results),
+            avg_score=np.mean([p['keyword_score'] for p in keyword_results]) if keyword_results else 0
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 2: Semantic Search (Contextual)
+        # ────────────────────────────────────────────────────────
+        logger.debug("Phase 2: Semantic search")
+        
+        # Import embedding service
+        from app.services.bootstrap.embedding_service import get_embedding_service
+        embedding_service = get_embedding_service()
+        
+        # Generate query embedding
+        query_embedding = embedding_service.encode_text(
+            text=search_query,
+            model=embedding_key,
+            normalize=True
+        )
+        
+        logger.debug(
+            "Query embedding generated",
+            model=embedding_key,
+            embedding_shape=query_embedding.shape
+        )
+        
+        # Semantic search
+        semantic_results_raw = await self.paper_repo.semantic_search(
+            embedding=query_embedding,
+            model=embedding_key,
+            domain=profile['primary_domain'],
+            limit=50,
+            min_similarity=0.2
+        )
+        
+        # FIX: Convert to dict
+        semantic_results = semantic_results_raw  # Already returns List[Dict] from semantic_search
+        
+        # Tag scores
+        for paper in semantic_results:
+            paper['match_source'] = 'semantic'
+            paper['semantic_score'] = float(paper.get('similarity', 0))
+        
+        logger.info(
+            "Semantic search complete",
+            results=len(semantic_results),
+            avg_similarity=np.mean([p['semantic_score'] for p in semantic_results]) if semantic_results else 0
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 3: Profile-Based Candidates (Personalization)
+        # ────────────────────────────────────────────────────────
+        logger.debug("Phase 3: Profile-based retrieval")
+        
+        profile_results_raw = await self._retrieve_semantic_candidates(
+            user_embedding=user_embedding,
+            domain=profile['primary_domain'],
+            model=embedding_key,
+            limit=50
+        )
+        
+        # FIX: Convert to dict
+        profile_results = [dict(row) for row in profile_results_raw]
+        
+        # Tag scores
+        for paper in profile_results:
+            if 'match_source' not in paper:
+                paper['match_source'] = 'profile'
+            paper['profile_score'] = float(paper.get('semantic_similarity', 0))
+        
+        logger.info(
+            "Profile-based retrieval complete",
+            results=len(profile_results)
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 4: Merge and Deduplicate
+        # ────────────────────────────────────────────────────────
+        logger.debug("Phase 4: Merging results")
+        
+        all_candidates = {}
+        
+        # Merge keyword results
+        for paper in keyword_results:
+            paper_id = paper['paper_id']
+            all_candidates[paper_id] = paper
+        
+        # Merge semantic results
+        for paper in semantic_results:
+            paper_id = paper['paper_id']
+            if paper_id in all_candidates:
+                # Paper appears in multiple sources - merge scores
+                all_candidates[paper_id]['semantic_score'] = paper['semantic_score']
+                if all_candidates[paper_id]['match_source'] == 'keyword':
+                    all_candidates[paper_id]['match_source'] = 'keyword+semantic'
+            else:
+                all_candidates[paper_id] = paper
+        
+        # Merge profile results
+        for paper in profile_results:
+            paper_id = paper['paper_id']
+            if paper_id in all_candidates:
+                all_candidates[paper_id]['profile_score'] = paper['profile_score']
+            else:
+                all_candidates[paper_id] = paper
+        
+        candidates_list = list(all_candidates.values())
+        
+        logger.info(
+            "Candidates merged",
+            total_unique=len(candidates_list),
+            keyword_only=sum(1 for p in candidates_list if p['match_source'] == 'keyword'),
+            semantic_only=sum(1 for p in candidates_list if p.get('match_source') == 'semantic'),
+            profile_only=sum(1 for p in candidates_list if p.get('match_source') == 'profile'),
+            multi_source=sum(1 for p in candidates_list if '+' in p.get('match_source', ''))
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 5: Hybrid Scoring
+        # ────────────────────────────────────────────────────────
+        logger.debug("Phase 5: Hybrid scoring")
+        
+        # Default search weights (search-heavy)
+        default_weights = {
+            'keyword': 0.50,
+            'semantic': 0.35,
+            'profile': 0.15
+        }
+        
+        weights = scoring_weights or default_weights
+        
+        for paper in candidates_list:
+            # Fill missing scores with 0
+            keyword_score = paper.get('keyword_score', 0.0)
+            semantic_score = paper.get('semantic_score', 0.0)
+            profile_score = paper.get('profile_score', 0.0)
+            
+            # Calculate final score
+            paper['final_score'] = (
+                weights['keyword'] * keyword_score +
+                weights['semantic'] * semantic_score +
+                weights['profile'] * profile_score
+            )
+            
+            # Store breakdown for explainability
+            paper['score_breakdown'] = {
+                'keyword': keyword_score,
+                'semantic': semantic_score,
+                'profile': profile_score,
+                #'weights': weights
+            }
+        
+        # Sort by final score
+        candidates_list.sort(key=lambda x: x['final_score'], reverse=True)
+        
+        logger.info(
+            "Hybrid scoring complete",
+            total_candidates=len(candidates_list),
+            avg_score=np.mean([p['final_score'] for p in candidates_list]) if candidates_list else 0,
+            max_score=candidates_list[0]['final_score'] if candidates_list else 0
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 6: Diversity Filtering
+        # ────────────────────────────────────────────────────────
+        logger.debug("Phase 6: Applying diversity")
+        
+        diverse_papers = await self._apply_diversity_filtering(
+            scored_papers=candidates_list,
+            target_count=min(count * 2, 21),  # Get extra for final selection
+            max_per_author=2,
+            max_per_venue=2
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # PHASE 7: Take Top N and Enrich
+        # ────────────────────────────────────────────────────────
+        final_recommendations = diverse_papers[:count]
+        
+        # Enrich with explanations
+        enriched = self._enrich_search_recommendations(
+            papers=final_recommendations,
+            search_query=search_query,
+            user_interests=[i['interest_term'] for i in interests]
+        )
+        
+        logger.info(
+            "Search-augmented recommendations generated",
+            user_id=user_id,
+            search_query=search_query[:50],
+            count=len(enriched),
+            avg_score=np.mean([p['final_score'] for p in enriched]) if enriched else 0,
+            sample_explanation=enriched[0].get('relevance_explanation') if enriched else None
+        )
+        
+        return {
+            'user_id': user_id,
+            'papers': enriched,
+            'method': 'search_augmented',
+            'search_query': search_query,
+            'model_used': model,
+            'scoring_weights': weights,
+            'generated_at': datetime.utcnow().isoformat(),
+            'total_candidates': len(candidates_list)
+        }
+
+    def _enrich_search_recommendations(
+        self,
+        papers: List[Dict],
+        search_query: str,
+        user_interests: List[str]
+    ) -> List[Dict]:
+        """
+        Add relevance explanations for search-augmented recommendations.
+        Checks both title AND abstract for matches.
+        """
+        
+        if not papers:
+            logger.warning("No papers to enrich")
+            return []
+        
+        if not search_query:
+            logger.warning("No search query provided for enrichment")
+            search_query = ""
+        
+        enriched = []
+        
+        for i, paper in enumerate(papers):
+            try:
+                enriched_paper = paper.copy()
+                
+                # Safely get title and abstract (handle None values)
+                title = str(paper.get('title') or '')
+                abstract = str(paper.get('abstract') or '')
+                
+                title_lower = title.lower()
+                abstract_lower = abstract.lower()
+                
+                # Generate explanation
+                explanation_parts = []
+                
+                match_source = paper.get('match_source', '')
+                breakdown = paper.get('score_breakdown', {})
+                
+                # Extract search terms (remove stop words and short terms)
+                stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with'}
+                query_terms = [
+                    t.lower() for t in search_query.split() 
+                    if len(t) > 3 and t.lower() not in stop_words
+                ]
+                
+                # Check for keyword matches
+                if 'keyword' in match_source or breakdown.get('keyword', 0) > 0.1:
+                    # Find matched terms in TITLE
+                    title_matches = [term for term in query_terms if term in title_lower]
+                    
+                    # Find matched terms in ABSTRACT
+                    abstract_matches = [term for term in query_terms if term in abstract_lower]
+                    
+                    if title_matches:
+                        # Title matches are more important
+                        unique_matches = list(set(title_matches))[:4]  # Max 4 terms
+                        explanation_parts.append(
+                            f"Title matches: {', '.join(unique_matches)}"
+                        )
+                    elif abstract_matches:
+                        # Abstract matches
+                        unique_matches = list(set(abstract_matches))[:4]
+                        explanation_parts.append(
+                            f"Abstract discusses: {', '.join(unique_matches)}"
+                        )
+                    else:
+                        # Generic keyword match
+                        explanation_parts.append("Matches your search query")
+                
+                # Check for semantic similarity
+                if 'semantic' in match_source or breakdown.get('semantic', 0) > 0.5:
+                    explanation_parts.append("Semantically similar to your search")
+                
+                # Check for profile alignment
+                if breakdown.get('profile', 0) > 0.6:
+                    explanation_parts.append("Aligns with your research interests")
+                elif breakdown.get('profile', 0) > 0.4:
+                    explanation_parts.append("Relevant to your research area")
+                
+                # Add citation quality note if high
+                citation_count = paper.get('citation_count', 0)
+                if citation_count > 500:
+                    explanation_parts.append(f"Highly influential ({citation_count} citations)")
+                elif citation_count > 100:
+                    explanation_parts.append(f"Well-cited ({citation_count} citations)")
+                
+                # Add recency note for recent papers
+                year = paper.get('year', 0)
+                if year >= 2023:
+                    explanation_parts.append("Recent research")
+                
+                # Default explanation if nothing else
+                if not explanation_parts:
+                    explanation_parts.append("Relevant to your query")
+                
+                # Build final explanation
+                enriched_paper['relevance_explanation'] = '; '.join(explanation_parts)
+                enriched_paper['relevance_score'] = round(paper.get('final_score', 0), 3)
+                
+                # Add match details for debugging (optional)
+                enriched_paper['match_details'] = {
+                    'title_matches': [t for t in query_terms if t in title_lower],
+                    'abstract_matches': [t for t in query_terms if t in abstract_lower],
+                    'total_query_terms': len(query_terms),
+                    'match_source': match_source
+                }
+                
+                enriched.append(enriched_paper)
+                
+            except Exception as e:
+                logger.error(
+                    "Failed to enrich paper",
+                    index=i,
+                    paper_id=paper.get('paper_id'),
+                    error=str(e),
+                    exc_info=True
+                )
+                # Add without enrichment
+                enriched.append(paper)
+        
+        logger.info(
+            "Enrichment complete",
+            enriched_count=len(enriched),
+            sample_explanation=enriched[0].get('relevance_explanation')[:80] if enriched else None
+        )
+        
+        return enriched
+   
     # -------------------------------------------------------------------------
     # Candidate retrieval helpers
     # -------------------------------------------------------------------------

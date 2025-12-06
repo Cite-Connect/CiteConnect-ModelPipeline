@@ -54,13 +54,15 @@ async def get_recommendations(
 ):
     """
     Generate paper recommendations.
+    Supports optional search query for search-augmented mode.
     """
     logger.info(
         "Recommendation request received",
         user_id=request_data.user_id,
         count=request_data.count,
         model=request_data.model_preference,
-        session_id=request_data.session_id
+        session_id=request_data.session_id,
+        has_search_query=bool(request_data.search_query)  # ← NEW
     )
     
     try:
@@ -75,33 +77,19 @@ async def get_recommendations(
                 detail="User ID is required for recommendations"
             )
         
-        logger.info(
-            "Validated request, generating recommendations",
-            user_id=request_data.user_id
-        )
-        
-        # Map 'minilm' shortcode to full model name if necessary
+        # Map model names
         model_map = {
             'minilm': 'all-MiniLM-L6-v2',
             'specter': 'specter2'
         }
-        model_name = model_map.get(
-            request_data.model_preference, 
-            request_data.model_preference
-        )
-        
-        logger.info(
-            "Calling orchestrator.generate_recommendations",
-            user_id=request_data.user_id,
-            model_name=model_name,
-            count=request_data.count
-        )
+        model_name = model_map.get(request_data.model_preference, request_data.model_preference)
 
-        # Generate recommendations
+        # Generate recommendations (with optional search)
         result = await orchestrator.generate_recommendations(
             user_id=request_data.user_id,
             model_name=model_name,
             count=request_data.count,
+            search_query=request_data.search_query,  # ← NEW: Pass search query
             filters=request_data.filters.dict() if request_data.filters else None
         )
         
@@ -110,18 +98,13 @@ async def get_recommendations(
             user_id=request_data.user_id,
             count=len(result.get('recommendations', [])),
             strategy=result.get('metadata', {}).get('strategy_used'),
+            search_query=request_data.search_query[:50] if request_data.search_query else None,  # ← NEW
             time_ms=result.get('metadata', {}).get('generation_time_ms')
         )
         
         return result
         
-    except HTTPException as he:
-        logger.warning(
-            "HTTPException in get_recommendations",
-            status_code=he.status_code,
-            detail=he.detail,
-            user_id=request_data.user_id
-        )
+    except HTTPException:
         raise
     
     except Exception as e:
@@ -129,7 +112,6 @@ async def get_recommendations(
             "Recommendation generation failed",
             user_id=request_data.user_id,
             error=str(e),
-            error_type=type(e).__name__,
             exc_info=True
         )
         

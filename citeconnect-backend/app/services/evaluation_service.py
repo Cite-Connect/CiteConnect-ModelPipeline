@@ -229,6 +229,237 @@ class EvaluationService:
         
         return evaluation_result
     
+    async def evaluate_search_augmented_recommendations(
+        self,
+        user_id: int,
+        search_query: str,
+        recommendations: List[Dict],
+        model: str = 'minilm',
+        store_result: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Evaluate search-augmented recommendations.
+        Combines query relevance with profile alignment.
+        
+        Args:
+            user_id: User identifier
+            search_query: Original search query
+            recommendations: List of recommended papers
+            model: Embedding model used
+            store_result: Whether to store evaluation
+            
+        Returns:
+            Dict with evaluation metrics
+        """
+        logger.info(
+            "Evaluating search-augmented recommendations",
+            user_id=user_id,
+            search_query=search_query[:50],
+            recommendation_count=len(recommendations),
+            model=model
+        )
+        
+        # Get user data
+        profile = await self.user_repo.get_profile(user_id)
+        if not profile:
+            raise ValueError(f"No profile found for user {user_id}")
+        
+        interests = await self.user_repo.get_user_interests(user_id)
+        interest_terms = [i['interest_term'] for i in interests]
+        
+        # ────────────────────────────────────────────────────────
+        # METRIC 1: Search Query Alignment (50% weight)
+        # ────────────────────────────────────────────────────────
+        search_alignment = await self._calculate_search_alignment(
+            recommendations=recommendations,
+            search_query=search_query
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # METRIC 2: Profile Alignment (30% weight)
+        # ────────────────────────────────────────────────────────
+        profile_alignment = await self._calculate_profile_alignment(
+            recommendations=recommendations,
+            user_interests=interest_terms
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # METRIC 3: Ground Truth Quality (20% weight - lower for search)
+        # ────────────────────────────────────────────────────────
+        ground_truth_quality = await self._calculate_ground_truth_quality(
+            recommendations=recommendations,
+            user_domain=profile['primary_domain'],
+            user_interests=interest_terms
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # Combined Score (Search-weighted)
+        # ────────────────────────────────────────────────────────
+        combined_score = (
+            0.50 * search_alignment +      # Search intent is primary
+            0.40 * profile_alignment +     # Profile still matters
+            0.10 * ground_truth_quality    # Academic validation
+        )
+        
+        # Threshold (more lenient for search)
+        passes_threshold = combined_score >= 0.50  # Lower than 0.60 for profile-only
+        
+        evaluation_result = {
+            'user_id': user_id,
+            'evaluation_type': 'search_augmented',
+            'search_query': search_query,
+            'model_used': model,
+            'search_alignment': round(search_alignment, 4),
+            'profile_alignment': round(profile_alignment, 4),
+            'ground_truth_quality': round(ground_truth_quality, 4),
+            'combined_score': round(combined_score, 4),
+            'passes_threshold': passes_threshold,
+            'recommendation_count': len(recommendations),
+            'evaluated_at': datetime.utcnow().isoformat(),
+            'thresholds': {
+                'search_alignment': 0.60,
+                'combined_score': 0.50
+            }
+        }
+        
+        logger.info(
+            "Search-augmented evaluation complete",
+            user_id=user_id,
+            search_alignment=search_alignment,
+            profile_alignment=profile_alignment,
+            combined_score=combined_score,
+            passes=passes_threshold
+        )
+        
+        # Store if requested
+        if store_result:
+            await self._store_search_evaluation(evaluation_result)
+        
+        return evaluation_result
+
+
+    async def _calculate_search_alignment(
+        self,
+        recommendations: List[Dict],
+        search_query: str
+    ) -> float:
+        """
+        Calculate how well recommendations match the search query.
+        
+        Args:
+            recommendations: List of papers
+            search_query: Original search query
+            
+        Returns:
+            Search alignment score (0.0-1.0)
+        """
+        if not recommendations or not search_query:
+            return 0.0
+        
+        # Extract search terms
+        search_terms = set(search_query.lower().split())
+        
+        # Remove common stop words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'}
+        search_terms = {term for term in search_terms if term not in stop_words and len(term) > 2}
+        
+        if not search_terms:
+            return 0.0
+        
+        paper_scores = []
+        
+        for paper in recommendations:
+            # Combine title and abstract
+            paper_text = (
+                paper.get('title', '') + ' ' +
+                paper.get('abstract', '')
+            ).lower()
+            
+            # Count matching terms
+            matches = sum(1 for term in search_terms if term in paper_text)
+            
+            # Calculate score
+            match_score = matches / len(search_terms)
+            
+            # Bonus for title matches
+            title_text = paper.get('title', '').lower()
+            title_matches = sum(1 for term in search_terms if term in title_text)
+            if title_matches > 0:
+                match_score *= 1.2  # 20% bonus for title matches
+            
+            # Cap at 1.0
+            match_score = min(match_score, 1.0)
+            
+            paper_scores.append(match_score)
+        
+        # Average across all papers
+        search_alignment = np.mean(paper_scores)
+        
+        logger.debug(
+            "Search alignment calculated",
+            score=search_alignment,
+            search_terms=list(search_terms),
+            paper_count=len(recommendations)
+        )
+        
+        return float(search_alignment)
+
+
+    async def _store_search_evaluation(
+        self,
+        evaluation: Dict[str, Any]
+    ) -> None:
+        """
+        Store search-augmented evaluation result.
+        
+        Args:
+            evaluation: Evaluation result dict
+        """
+        query = """
+            INSERT INTO cold_start_evaluations (
+                user_id,
+                embedding_model,
+                profile_alignment,
+                ground_truth_quality,
+                combined_score,
+                recommendation_count,
+                evaluation_timestamp,
+                evaluation_metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
+            RETURNING evaluation_id
+        """
+        
+        metadata = {
+            'evaluation_type': 'search_augmented',
+            'search_query': evaluation['search_query'],
+            'search_alignment': evaluation['search_alignment']
+        }
+        
+        try:
+            result = await self.db.fetchrow(
+                query,
+                evaluation['user_id'],
+                evaluation['model_used'],
+                evaluation['profile_alignment'],
+                evaluation['ground_truth_quality'],
+                evaluation['combined_score'],
+                evaluation['recommendation_count'],
+                metadata
+            )
+            
+            logger.debug(
+                "Search evaluation stored",
+                evaluation_id=result['evaluation_id'] if result else None,
+                user_id=evaluation['user_id']
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to store search evaluation",
+                error=str(e),
+                exc_info=True
+            )
+    
     async def batch_evaluate_cold_start(
         self,
         user_ids: Optional[List[int]] = None,

@@ -46,39 +46,24 @@ class RecommendationOrchestrator:
         user_id: int,
         model_name: Optional[str] = None, 
         count: int = 10,
+        search_query: Optional[str] = None,  # ← NEW PARAMETER
         filters: Optional[Dict] = None
     ) -> Dict:
         """
         Generate recommendations by coordinating services.
-        
-        Flow:
-        1. Context: Get user profile and A/B test variant.
-        2. Generate: Delegate to RecommendationService (The "Chef").
-        3. Fallback: If Chef fails, fetch trending papers.
-        4. Evaluate: Run online quality check (The "Inspector").
-        5. Log: Record event for offline analysis (The "Scribe").
+        Now supports search-augmented mode.
         """
+        original_search_query = search_query
         start_time = time.time()
         
-        # ---------------------------------------------------------
-        # 1. Context & Strategy Assignment
-        # ---------------------------------------------------------
-        logger.info(
-            "🎯 ORCHESTRATOR START",
-            user_id=user_id,
-            model_name=model_name,
-            count=count
-        )
-        
-        start_time = time.time()
+        # Get user context
         try:
-            logger.info("Step 1: Getting user context")
             user_context = await self.user_state_service.get_user_context(user_id)
         except Exception as e:
             logger.warning(f"Failed to get user context: {e}. Using defaults.")
             user_context = {'stage': 'cold_start', 'profile': {}}
 
-        # If model not forced by API, ask Experiment Service (A/B Testing)
+        # Determine model
         if not model_name:
             if self.experiment_service:
                 try:
@@ -87,69 +72,92 @@ class RecommendationOrchestrator:
                     logger.error(f"Experiment service failed: {e}")
                     model_name = 'minilm'
             else:
-                model_name = 'minilm' # Default fallback
+                model_name = 'minilm'
 
         logger.info(
             "Generating recommendations",
             user_id=user_id,
             model=model_name,
-            stage=user_context.get('stage')
+            stage=user_context.get('stage'),
+            has_search_query=bool(search_query)  # ← NEW
         )
 
         recommendations = []
-        strategy_used = "hybrid_service"
         
-        # ---------------------------------------------------------
-        # 2. Generation (The "Chef")
-        # ---------------------------------------------------------
-        try:
-            # The RecommendationService handles the complex Cold/Warm logic internally.
-            result = await self.rec_service.generate_recommendations(
-                user_id=user_id,
-                count=count,
-                model=model_name,
-                scoring_weights=None # Use Service defaults
-            )
-            recommendations = result.get('papers', [])
+        # ────────────────────────────────────────────────────────
+        # ROUTE BASED ON SEARCH QUERY
+        # ────────────────────────────────────────────────────────
+        if search_query and search_query.strip():
+            # SEARCH-AUGMENTED MODE
+            strategy_used = "search_augmented"
             
-        except Exception as e:
-            logger.error(f"Primary recommendation strategy failed: {e}", exc_info=True)
-            
-            # FALLBACK: If the main service crashes (e.g., Vector DB down), 
-            # fall back to a safe "Trending" query that relies only on SQL.
-            logger.warning("Falling back to Trending Papers")
             try:
-                # Access trending papers via the repo attached to the service
-                domain = user_context.get('profile', {}).get('primary_domain', 'machine_learning')
-                recommendations = await self.rec_service.paper_repo.get_trending_papers(
-                    domain=domain,
-                    limit=count
+                logger.info(
+                    "Using search-augmented strategy",
+                    search_query=search_query[:100]
                 )
                 
-                # Convert raw rows to dicts and add dummy metadata
-                recommendations = [dict(p) for p in recommendations]
-                for p in recommendations:
-                    p['relevance_explanation'] = "Popular in your field (Fallback)"
-                    p['final_score'] = 0.5 # Default score
+                result = await self.rec_service.generate_search_augmented_recommendations(
+                    user_id=user_id,
+                    search_query=search_query,
+                    count=count,
+                    model=model_name
+                )
+                recommendations = result.get('papers', [])
                 
-                strategy_used = "fallback_trending"
+            except Exception as e:
+                logger.error(f"Search-augmented strategy failed: {e}", exc_info=True)
+                # Fallback to regular recommendations
+                logger.warning("Falling back to profile-based recommendations")
+                search_query = None  # Clear search to trigger fallback
+        
+        # ────────────────────────────────────────────────────────
+        # FALLBACK: PROFILE-BASED MODE (Original Logic)
+        # ────────────────────────────────────────────────────────
+        if not recommendations:
+            try:
+                result = await self.rec_service.generate_recommendations(
+                    user_id=user_id,
+                    count=count,
+                    model=model_name,
+                    scoring_weights=None
+                )
+                recommendations = result.get('papers', [])
+                strategy_used = result.get('method', 'hybrid_service')
                 
-            except Exception as fallback_error:
-                logger.error(f"Fallback strategy also failed: {fallback_error}")
-                recommendations = []
+            except Exception as e:
+                logger.error(f"Primary recommendation strategy failed: {e}", exc_info=True)
+                
+                # Final fallback: Trending papers
+                logger.warning("Falling back to Trending Papers")
+                try:
+                    domain = user_context.get('profile', {}).get('primary_domain', 'machine_learning')
+                    recommendations = await self.rec_service.paper_repo.get_trending_papers(
+                        domain=domain,
+                        limit=count
+                    )
+                    
+                    recommendations = [dict(p) for p in recommendations]
+                    for p in recommendations:
+                        p['relevance_explanation'] = "Popular in your field (Fallback)"
+                        p['final_score'] = 0.5
+                    
+                    strategy_used = "fallback_trending"
+                    
+                except Exception as fallback_error:
+                    logger.error(f"Fallback strategy also failed: {fallback_error}")
+                    recommendations = []
 
         if not recommendations:
-            # If everything fails, return empty list (let frontend handle empty state)
             logger.error(f"Failed to generate recommendations for user {user_id}")
             return {
                 "recommendations": [],
                 "metadata": {"error": "Generation failed"}
             }
 
-        # ---------------------------------------------------------
-        # 3. Evaluation (The "Inspector")
-        # ---------------------------------------------------------
-        # Run a quick online check. Set store_result=False to keep it fast.
+        # ────────────────────────────────────────────────────────
+        # EVALUATION
+        # ────────────────────────────────────────────────────────
         eval_report = {}
         try:
             if user_context.get('stage') == 'cold_start':
@@ -166,7 +174,6 @@ class RecommendationOrchestrator:
                     store_result=False
                 )
                 
-            # Optional Guardrail: Log warning if quality is very low
             score = eval_report.get('combined_score') or eval_report.get('precision_at_10', 0)
             if score < 0.2:
                 logger.warning(
@@ -177,41 +184,39 @@ class RecommendationOrchestrator:
         except Exception as e:
             logger.warning(f"Online evaluation failed (non-blocking): {e}")
 
-        # ---------------------------------------------------------
-        # 4. Logging (The "Scribe")
-        # ---------------------------------------------------------
+        # ────────────────────────────────────────────────────────
+        # LOGGING
+        # ────────────────────────────────────────────────────────
         generation_time = (time.time() - start_time) * 1000
         
         if self.experiment_service:
             try:
-                # Log event for MLflow/Offline analysis
-                # Ideally, this should be non-blocking (fire and forget)
-                eval_report_with_strategy = eval_report.copy()
-                eval_report_with_strategy['strategy_used'] = strategy_used
                 await self.experiment_service.log_recommendation_event(
                     user_id=user_id,
                     model_name=model_name,
                     recommendations=recommendations,
-                    evaluation_scores=eval_report_with_strategy,
+                    evaluation_scores=eval_report,
                     user_context=user_context,
                     generation_time_ms=generation_time
                 )
             except Exception as e:
                 logger.error(f"Failed to log experiment event: {e}")
 
-        # ---------------------------------------------------------
-        # 5. Response Construction
-        # ---------------------------------------------------------
+        # ────────────────────────────────────────────────────────
+        # RESPONSE
+        # ────────────────────────────────────────────────────────
         response = {
-        "recommendations": recommendations,
-        "metadata": {
-            "user_stage": user_context.get('stage'),
-            "strategy_used": strategy_used,
-            "model_used": model_name,
-            "evaluation_score": eval_report.get('combined_score') or eval_report.get('precision_at_10',0.0),
-            "evaluation_scores": eval_report,  # ADD THIS - full eval report
-            "cache_hit": False,  # ADD THIS - set to False for now
-            "generation_time_ms": round(generation_time, 2)
+            "recommendations": recommendations,
+            "metadata": {
+                "user_stage": user_context.get('stage'),
+                "strategy_used": strategy_used,
+                "model_used": model_name,
+                "search_query": original_search_query,  # ← Make sure this variable is in scope
+                "evaluation_score": eval_report.get('combined_score') or eval_report.get('precision_at_10', 0.0),
+                "evaluation_scores": eval_report if eval_report else {},
+                "cache_hit": False,
+                "generation_time_ms": round(generation_time, 2),
+                "search_query": original_search_query,
             }
         }
         

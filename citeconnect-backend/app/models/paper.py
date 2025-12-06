@@ -2,7 +2,7 @@
 Pydantic models for paper-related data structures.
 Provides validation and serialization for API requests/responses.
 """
-from typing import Optional, List
+from typing import Optional, List, Dict
 from datetime import datetime
 from pydantic import BaseModel, Field, validator
 
@@ -40,9 +40,13 @@ class PaperResponse(PaperBase):
     tldr: Optional[str] = None
     relevance_score: Optional[float] = Field(None, ge=0.0, le=1.0)
     matching_aspects: List[str] = Field(default_factory=list)
+    match_source: Optional[str] = None  # ← NEW
+    relevance_explanation: Optional[str] = None  # ← NEW
+    score_breakdown: Optional[Dict[str, float]] = None  # ← NEW
     
     class Config:
         from_attributes = True
+        extra = "allow"
 
 
 class PaperWithEmbedding(PaperResponse):
@@ -71,10 +75,15 @@ class RecommendationRequest(BaseModel):
         default="personalized",
         description="Recommendation strategy"
     )
+    search_query: Optional[str] = Field(  # ← NEW
+        default=None,
+        max_length=500,
+        description="Optional search query to augment recommendations"
+    )
     filters: Optional['RecommendationFilters'] = None
     session_id: str = Field(..., description="Session tracking ID")
     
-    model_config = {"protected_namespaces": ()}  # Disable Pydantic model_ namespace protection
+    model_config = {"protected_namespaces": ()}
     
     @validator('model_preference')
     def validate_model(cls, v):
@@ -87,9 +96,18 @@ class RecommendationRequest(BaseModel):
     @validator('strategy')
     def validate_strategy(cls, v):
         """Validate strategy name."""
-        allowed = ['personalized', 'canonical', 'trending']
+        allowed = ['personalized', 'canonical', 'trending', 'search']  # ← Added 'search'
         if v not in allowed:
             raise ValueError(f"Strategy must be one of {allowed}")
+        return v
+    
+    @validator('search_query')  # ← NEW
+    def validate_search_query(cls, v):
+        """Validate and clean search query."""
+        if v is not None:
+            v = v.strip()
+            if len(v) < 3:
+                raise ValueError("Search query must be at least 3 characters")
         return v
 
 

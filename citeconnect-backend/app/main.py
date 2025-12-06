@@ -369,7 +369,7 @@ async def root():
 
 
 # Import and include routers
-from app.api.v1 import recommendations, users, papers, interactions
+from app.api.v1 import recommendations, users, papers, interactions, search
 
 app.include_router(
     recommendations.router,
@@ -391,7 +391,11 @@ app.include_router(
     prefix=f"{settings.API_V1_PREFIX}/interactions",
     tags=["interactions"]
 )
-
+app.include_router(  # ← NEW
+    search.router,
+    prefix=f"{settings.API_V1_PREFIX}/search",
+    tags=["search"]
+)
 
 if __name__ == "__main__":
     import uvicorn
