@@ -1,0 +1,84 @@
+### CiteConnect API Requests
+
+### Variables
+@baseUrl = http://localhost:8000/api/v1
+@token = 
+
+### Health Check
+GET http://localhost:8000/health
+
+### User Registration
+POST {{baseUrl}}/users/register
+Content-Type: application/json
+
+{
+  "email": "tuser25@gmail.com",
+  "password": "tUser1234",
+  "full_name": "Test User 3"
+}
+
+### User Login
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "tuser18@gmail.com",
+  "password": "tUser123"
+}
+
+### Create User Profile (replace {user_id})
+POST {{baseUrl}}/users/1/profile
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "primary_domain": "healthcare",
+  "reading_level": "advanced",
+  "interests": ["machine learning", "medical imaging", "diagnostics"],
+  "research_stage": "phd",
+  "years_experience": 3
+}
+
+### Get User Profile
+GET {{baseUrl}}/users/1/profile
+Authorization: Bearer {{token}}
+
+### Get User State
+GET {{baseUrl}}/users/1/state
+Authorization: Bearer {{token}}
+
+### Search Papers
+POST {{baseUrl}}/papers/search
+Content-Type: application/json
+
+{
+  "query": "deep learning medical imaging",
+  "limit": 10
+}
+
+### Get Recommendations (requires paper data)
+POST {{baseUrl}}/recommendations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "user_id": 1,
+  "count": 10,
+  "model_preference": "all-MiniLM-L6-v2",
+  "session_id": "test-session-1"
+}
+
+### Track Interaction
+POST {{baseUrl}}/interactions/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "paper_id": "paper_id_here",
+  "interaction_type": "save",
+  "context": {
+    "source": "recommendation",
+    "position": 1,
+    "session_id": "test-session-1"
+  }
+}

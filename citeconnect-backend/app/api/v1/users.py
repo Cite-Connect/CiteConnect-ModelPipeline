@@ -14,6 +14,7 @@ from app.config import settings
 from app.utils.logger import get_logger
 from app.db.connection import get_db, DatabaseConnection
 from app.db.repositories.user_repo import UserRepository
+from app.services.user_embedding_service import UserEmbeddingService
 
 logger = get_logger(__name__)
 
@@ -21,15 +22,6 @@ router = APIRouter()
 
 # Password hashing
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
-# Allowed values from Supabase schema
-ALLOWED_DOMAINS = ['healthcare', 'fintech', 'quantum_computing']
-ALLOWED_RESEARCH_STAGES = [
-    'undergraduate', 'masters', 'phd', 'postdoc', 
-    'professor', 'industry', 'independent'
-]
-ALLOWED_READING_LEVELS = ['introductory', 'intermediate', 'advanced', 'expert']
-ALLOWED_TIME_AVAILABILITY = ['casual_reader', 'part_time_researcher', 'full_time_researcher']
 
 
 # Pydantic models
@@ -90,34 +82,34 @@ class UserProfileCreate(BaseModel):
     
     @validator('research_stage')
     def validate_research_stage(cls, v):
-        if v and v not in ALLOWED_RESEARCH_STAGES:
+        if v and v not in settings.ALLOWED_RESEARCH_STAGES:
             raise ValueError(
-                f"Research stage must be one of {ALLOWED_RESEARCH_STAGES}"
+                f"Research stage must be one of {settings.ALLOWED_RESEARCH_STAGES}"
             )
         return v
     
     @validator('primary_domain')
     def validate_domain(cls, v):
-        if v not in ALLOWED_DOMAINS:
+        if v not in settings.ALLOWED_DOMAINS:
             raise ValueError(
-                f"Domain must be one of {ALLOWED_DOMAINS}. "
+                f"Domain must be one of {settings.ALLOWED_DOMAINS}. "
                 f"Currently supported: healthcare, fintech, quantum_computing"
             )
         return v
     
     @validator('reading_level')
     def validate_reading_level(cls, v):
-        if v not in ALLOWED_READING_LEVELS:
+        if v not in settings.ALLOWED_READING_LEVELS:
             raise ValueError(
-                f"Reading level must be one of {ALLOWED_READING_LEVELS}"
+                f"Reading level must be one of {settings.ALLOWED_READING_LEVELS}"
             )
         return v
     
     @validator('time_availability')
     def validate_time_availability(cls, v):
-        if v and v not in ALLOWED_TIME_AVAILABILITY:
+        if v and v not in settings.ALLOWED_TIME_AVAILABILITY:
             raise ValueError(
-                f"Time availability must be one of {ALLOWED_TIME_AVAILABILITY}"
+                f"Time availability must be one of {settings.ALLOWED_TIME_AVAILABILITY}"
             )
         return v
 
@@ -404,8 +396,9 @@ async def login(
 async def create_profile(
     user_id: int,
     profile_data: UserProfileCreate,
-    user_repo: UserRepository = Depends(get_user_repo)
-):
+    user_repo: UserRepository = Depends(get_user_repo),
+    db: DatabaseConnection = Depends(get_db)
+    ):
     """
     Create user profile.
     
@@ -452,6 +445,27 @@ async def create_profile(
             interest_count=len(profile.get('interests', {}).get('all', []))
         )
         
+        #Generate user embeddings after profile creation
+        try:
+            user_embedding_service = UserEmbeddingService(db)
+            embeddings = await user_embedding_service.get_or_generate_user_embeddings(user_id)
+            
+            logger.info(
+                "User embeddings generated",
+                user_id=user_id,
+                minilm_dim=len(embeddings['minilm']),
+                specter_dim=len(embeddings['specter'])
+            )
+        except Exception as emb_error:
+            # Log error but don't fail profile creation
+            logger.error(
+                "Embedding generation failed, but profile created",
+                user_id=user_id,
+                error=str(emb_error),
+                exc_info=True
+            )
+
+
         return {
             "user_id": user_id,
             "profile": profile,

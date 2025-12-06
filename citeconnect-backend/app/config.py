@@ -3,9 +3,10 @@ Configuration management for CiteConnect backend.
 Loads settings from environment variables with validation.
 """
 import structlog
-from pydantic_settings import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
+
 
 logger = structlog.get_logger(__name__)
 
@@ -13,6 +14,12 @@ logger = structlog.get_logger(__name__)
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
+# --- IMPORTANT CHANGE HERE ---
+    model_config = SettingsConfigDict(
+        env_file=".env",            # 👈 Tell Pydantic to load from a .env file
+        env_file_encoding="utf-8",
+        extra="allow"               # Kept your original 'extra: "allow"'
+    )    
     # Application
     APP_NAME: str = "CiteConnect"
     APP_VERSION: str = "1.0.0"
@@ -26,17 +33,11 @@ class Settings(BaseSettings):
     
     # Database - Supabase PostgreSQL
     SUPABASE_URL: str
-    SUPABASE_KEY: str
+    SUPABASE_KEY: Optional[str] = None  # Optional - only needed for Supabase auth/storage
     DATABASE_URL: str  # postgres:// connection string
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
-
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "CiteConnect-Dev"
-    POSTGRES_DB: str = "postgres"
-    POSTGRES_HOST: str = "db.wvvogncqrqzfbfztkwfo.supabase.co"
-    POSTGRES_PORT: str = "5432"
     
     # Redis Cache
     REDIS_HOST: str = "localhost"
@@ -45,12 +46,13 @@ class Settings(BaseSettings):
     REDIS_PASSWORD: Optional[str] = None
     CACHE_TTL_MULTIPLIER: float = 1.0
     
-    # Embedding Models
+    # ML Models
     EMBEDDING_MODEL_MINILM: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_MODEL_SPECTER: str = "allenai/specter"
+    EMBEDDING_MODEL_SPECTER: str = "allenai/specter2"
+    MODEL_CACHE_DIR: str = "./models"
+    DEFAULT_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE: int = 32
     EMBEDDING_MAX_LENGTH: int = 512
-    MODEL_CACHE_DIR: str = "./models"
     
     # MLflow
     MLFLOW_TRACKING_URI: str = "http://localhost:5000"
@@ -110,10 +112,23 @@ class Settings(BaseSettings):
     # Background Workers
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
+
+    # Interaction thresholds for stage transitions
+    EARLY_STAGE_THRESHOLD:int = 10      # cold_start → early
+    MATURE_STAGE_THRESHOLD:int = 50     # early → mature
+    EXPERT_STAGE_THRESHOLD:int = 200    # mature → expert
     
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
+    # Update frequency
+    UPDATE_EVERY_N_INTERACTIONS:int = 10
+
+    # Allowed values from Supabase schema
+    ALLOWED_DOMAINS: list[str] = ['healthcare', 'fintech', 'quantum_computing']
+    ALLOWED_RESEARCH_STAGES: list[str] = [
+        'undergraduate', 'masters', 'phd', 'postdoc', 
+        'professor', 'industry', 'independent'
+    ]
+    ALLOWED_READING_LEVELS: list[str] = ['introductory', 'intermediate', 'advanced', 'expert']
+    ALLOWED_TIME_AVAILABILITY: list[str] = ['casual_reader', 'part_time_researcher', 'full_time_researcher']
 
 
 @lru_cache()

@@ -11,6 +11,8 @@ from app.services.bootstrap.embedding_service import get_embedding_service
 from app.db.connection import DatabaseConnection
 from app.db.repositories.user_repo import UserRepository
 from app.utils.logger import get_logger
+from app.db.repositories.paper_repo import PaperRepository
+from app.config import settings
 
 logger = get_logger(__name__)
 
@@ -26,14 +28,6 @@ class UserEmbeddingService:
     - Hybrid generation (mature users)
     """
     
-    # Interaction thresholds for stage transitions
-    EARLY_STAGE_THRESHOLD = 10      # cold_start → early
-    MATURE_STAGE_THRESHOLD = 50     # early → mature
-    EXPERT_STAGE_THRESHOLD = 200    # mature → expert
-    
-    # Update frequency
-    UPDATE_EVERY_N_INTERACTIONS = 10
-    
     def __init__(self, db: DatabaseConnection):
         """
         Initialize user embedding service.
@@ -44,6 +38,7 @@ class UserEmbeddingService:
         self.db = db
         self.embedding_service = get_embedding_service()
         self.user_repo = UserRepository(db)
+        self.paper_repo = PaperRepository(db)
         
         logger.info("UserEmbeddingService initialized")
     
@@ -66,11 +61,11 @@ class UserEmbeddingService:
         )
         
         # Check if embeddings exist
-        minilm_emb = await self._get_existing_embedding(user_id, 'minilm')
-        specter_emb = await self._get_existing_embedding(user_id, 'specter')
+        minilm_emb = await self.user_repo._get_existing_embedding(user_id, 'minilm')
+        specter_emb = await self.user_repo._get_existing_embedding(user_id, 'specter')
         
         # Check if regeneration needed
-        should_regenerate = await self._should_regenerate_embeddings(user_id)
+        should_regenerate = await self.user_repo._should_regenerate_embeddings(user_id)
         
         if minilm_emb is None or specter_emb is None or should_regenerate:
             logger.info(
@@ -121,19 +116,19 @@ class UserEmbeddingService:
         interaction_count = state['interaction_count']
         
         # Determine generation method based on interaction count
-        if interaction_count < self.EARLY_STAGE_THRESHOLD:
+        if interaction_count < settings.EARLY_STAGE_THRESHOLD:
             # COLD START: Use profile only
             method = 'profile_based'
             minilm_emb, specter_emb = await self._generate_from_profile(user_id)
             based_on_papers = None
             
-        elif interaction_count < self.MATURE_STAGE_THRESHOLD:
+        elif interaction_count < settings.MATURE_STAGE_THRESHOLD:
             # EARLY: Use interactions only
             method = 'interaction_based'
             minilm_emb, specter_emb = await self._generate_from_interactions(user_id)
             
             # Get papers used
-            interactions = await self._get_positive_interactions(user_id, limit=20)
+            interactions = await self.user_repo._get_positive_interactions(user_id, limit=20)
             based_on_papers = [i['paper_id'] for i in interactions]
             
         else:
@@ -142,11 +137,11 @@ class UserEmbeddingService:
             minilm_emb, specter_emb = await self._generate_hybrid(user_id)
             
             # Get papers used
-            interactions = await self._get_positive_interactions(user_id, limit=50)
+            interactions = await self.user_repo._get_positive_interactions(user_id, limit=50)
             based_on_papers = [i['paper_id'] for i in interactions]
         
         # Store both embeddings
-        await self._store_embedding(
+        await self.user_repo._store_embedding(
             user_id=user_id,
             model='minilm',
             embedding=minilm_emb,
@@ -155,7 +150,7 @@ class UserEmbeddingService:
             interaction_count=interaction_count
         )
         
-        await self._store_embedding(
+        await self.user_repo._store_embedding(
             user_id=user_id,
             model='specter',
             embedding=specter_emb,
@@ -165,10 +160,10 @@ class UserEmbeddingService:
         )
         
         # Update recommendation state timestamps
-        await self._update_embedding_timestamps(user_id)
+        await self.user_repo._update_embedding_timestamps(user_id)
         
         # Check for stage transition
-        await self._check_stage_transition(user_id, interaction_count)
+        await self.user_repo._check_stage_transition(user_id, interaction_count)
         
         logger.info(
             "User embeddings generated successfully",
@@ -246,7 +241,7 @@ class UserEmbeddingService:
         )
         
         # Get positive interactions (saved, liked, long views)
-        interactions = await self._get_positive_interactions(user_id, limit=50)
+        interactions = await self.user_repo._get_positive_interactions(user_id, limit=50)
         
         if not interactions:
             logger.warning(
@@ -264,8 +259,8 @@ class UserEmbeddingService:
         )
         
         # Get paper embeddings
-        minilm_embeddings = await self._get_paper_embeddings(paper_ids, 'minilm')
-        specter_embeddings = await self._get_paper_embeddings(paper_ids, 'specter')
+        minilm_embeddings = await self.paper_repo._get_paper_embeddings(paper_ids, 'minilm')
+        specter_embeddings = await self.paper_repo._get_paper_embeddings(paper_ids, 'specter')
         
         if not minilm_embeddings or not specter_embeddings:
             logger.warning(
@@ -395,261 +390,3 @@ class UserEmbeddingService:
         text = ' '.join(text_parts)
         
         return text
-    
-    async def _get_positive_interactions(
-        self,
-        user_id: int,
-        limit: int = 50
-    ) -> List[Dict]:
-        """
-        Get user's positive interactions (saved, liked, long views).
-        
-        Args:
-            user_id: User identifier
-            limit: Maximum interactions to retrieve
-            
-        Returns:
-            List of interaction records
-        """
-        query = """
-            SELECT 
-                paper_id,
-                interaction_type,
-                interaction_strength,
-                duration_seconds,
-                created_at
-            FROM user_interactions
-            WHERE user_id = $1
-              AND interaction_strength > 0
-            ORDER BY interaction_strength DESC, created_at DESC
-            LIMIT $2
-        """
-        
-        interactions = await self.db.fetch(query, user_id, limit)
-        
-        return [dict(i) for i in interactions]
-    
-    async def _get_paper_embeddings(
-        self,
-        paper_ids: List[str],
-        model: str
-    ) -> Optional[List[np.ndarray]]:
-        """
-        Get paper embeddings from database.
-        
-        Args:
-            paper_ids: List of paper identifiers
-            model: Model name ('minilm' or 'specter')
-            
-        Returns:
-            List of embedding vectors or None
-        """
-        table = f'paper_embeddings_{model}'
-        
-        query = f"""
-            SELECT embedding
-            FROM {table}
-            WHERE paper_id = ANY($1::text[])
-            ORDER BY array_position($1::text[], paper_id)
-        """
-        
-        results = await self.db.fetch(query, paper_ids)
-        
-        if not results:
-            return None
-        
-        embeddings = [np.array(r['embedding']) for r in results]
-        
-        return embeddings
-    
-    async def _get_existing_embedding(
-        self,
-        user_id: int,
-        model: str
-    ) -> Optional[np.ndarray]:
-        """
-        Get existing user embedding from database.
-        
-        Args:
-            user_id: User identifier
-            model: Model name ('minilm' or 'specter')
-            
-        Returns:
-            Embedding vector or None
-        """
-        table = f'user_embeddings_{model}'
-        
-        query = f"""
-            SELECT embedding
-            FROM {table}
-            WHERE user_id = $1
-        """
-        
-        result = await self.db.fetchrow(query, user_id)
-        
-        if result:
-            return np.array(result['embedding'])
-        
-        return None
-    
-    async def _store_embedding(
-        self,
-        user_id: int,
-        model: str,
-        embedding: np.ndarray,
-        generation_method: str,
-        based_on_papers: Optional[List[str]],
-        interaction_count: int
-    ):
-        """
-        Store or update user embedding in database.
-        
-        Args:
-            user_id: User identifier
-            model: Model name ('minilm' or 'specter')
-            embedding: Embedding vector
-            generation_method: How embedding was generated
-            based_on_papers: Papers used (if any)
-            interaction_count: Current interaction count
-        """
-        table = f'user_embeddings_{model}'
-        
-        # Convert numpy array to PostgreSQL vector string format
-        embedding_str = '[' + ','.join(map(str, embedding.tolist())) + ']'
-        
-        query = f"""
-            INSERT INTO {table} (
-                user_id,
-                embedding,
-                generation_method,
-                based_on_papers,
-                interaction_count,
-                created_at,
-                last_updated
-            )
-            VALUES ($1, $2::vector, $3, $4, $5, NOW(), NOW())
-            ON CONFLICT (user_id)
-            DO UPDATE SET
-                embedding = EXCLUDED.embedding,
-                generation_method = EXCLUDED.generation_method,
-                based_on_papers = EXCLUDED.based_on_papers,
-                interaction_count = EXCLUDED.interaction_count,
-                last_updated = NOW()
-        """
-        
-        await self.db.execute(
-            query,
-            user_id,
-            embedding_str,
-            generation_method,
-            based_on_papers,
-            interaction_count
-        )
-        
-        logger.debug(
-            "Embedding stored",
-            user_id=user_id,
-            model=model,
-            table=table
-        )
-    
-    async def _should_regenerate_embeddings(self, user_id: int) -> bool:
-        """
-        Check if embeddings should be regenerated.
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            True if regeneration needed
-        """
-        state = await self.user_repo.get_recommendation_state(user_id)
-        
-        if not state:
-            return False
-        
-        interaction_count = state['interaction_count']
-        
-        minilm = await self.db.fetchrow(
-            "SELECT interaction_count FROM user_embeddings_minilm WHERE user_id = $1",
-            user_id
-        )
-        
-        if not minilm:
-            return True
-        
-        stored_count = minilm['interaction_count']
-        
-        if interaction_count >= stored_count + self.UPDATE_EVERY_N_INTERACTIONS:
-            logger.info(
-                "Embedding regeneration needed",
-                user_id=user_id,
-                current_interactions=interaction_count,
-                stored_interactions=stored_count
-            )
-            return True
-        
-        return False
-    
-    async def _update_embedding_timestamps(self, user_id: int):
-        """
-        Update embedding generation timestamps in recommendation state.
-        
-        Args:
-            user_id: User identifier
-        """
-        query = """
-            UPDATE user_recommendation_state
-            SET 
-                last_embedding_update_minilm = NOW(),
-                last_embedding_update_specter = NOW(),
-                updated_at = NOW()
-            WHERE user_id = $1
-        """
-        
-        await self.db.execute(query, user_id)
-    
-    async def _check_stage_transition(
-        self,
-        user_id: int,
-        interaction_count: int
-    ):
-        """
-        Check and update recommendation stage based on interaction count.
-        
-        Args:
-            user_id: User identifier
-            interaction_count: Current interaction count
-        """
-        if interaction_count >= self.EXPERT_STAGE_THRESHOLD:
-            new_stage = 'expert'
-        elif interaction_count >= self.MATURE_STAGE_THRESHOLD:
-            new_stage = 'mature'
-        elif interaction_count >= self.EARLY_STAGE_THRESHOLD:
-            new_stage = 'early'
-        else:
-            new_stage = 'cold_start'
-        
-        current = await self.db.fetchrow(
-            "SELECT recommendation_stage FROM user_recommendation_state WHERE user_id = $1",
-            user_id
-        )
-        
-        if current and current['recommendation_stage'] != new_stage:
-            logger.info(
-                "Stage transition detected",
-                user_id=user_id,
-                old_stage=current['recommendation_stage'],
-                new_stage=new_stage,
-                interaction_count=interaction_count
-            )
-            
-            await self.db.execute(
-                """
-                UPDATE user_recommendation_state
-                SET recommendation_stage = $1, updated_at = NOW()
-                WHERE user_id = $2
-                """,
-                new_stage,
-                user_id
-            )
