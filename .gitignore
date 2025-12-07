@@ -32,6 +32,7 @@ ENV/
 .env.local
 env.py
 /env.py
+*/.env.bak
 
 # IDE
 .vscode/
