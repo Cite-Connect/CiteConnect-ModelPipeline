@@ -10,7 +10,7 @@ from app.db.connection import get_db, DatabaseConnection
 from app.services.graph_service import GraphService
 from app.db.repositories.user_repo import UserRepository
 import structlog
-
+from app.config import settings
 logger = structlog.get_logger()
 
 router = APIRouter()
@@ -103,6 +103,11 @@ async def get_citation_network(
         True,
         description="Include full paper metadata in nodes"
     ),
+    embedding_model: str = Query(
+        None,
+        regex="^(minilm|specter)$",
+        description="Embedding model for semantic similarity: 'minilm' or 'specter' (default: from config)"
+    ),
     db: DatabaseConnection = Depends(get_db)
 ):
     """
@@ -155,7 +160,9 @@ async def get_citation_network(
             paper_id=paper_id,
             depth=depth,
             max_nodes=max_nodes,
-            include_metadata=include_metadata
+            include_metadata=include_metadata,
+            embedding_model=embedding_model # ← THIS LINE MUST BE HERE
+
         )
         
         return graph_data
