@@ -3,9 +3,16 @@
 # =============================================================================
 """API version 1 endpoints."""
 from fastapi import APIRouter
-from app.api.v1 import recommendations, users, papers, interactions
+from app.api.v1 import recommendations, users, papers, interactions, graph
 
 router = APIRouter()
+
+# Include all v1 routers
+router.include_router(
+    graph.router,           # ✅ Add this
+    prefix="/graph",        # ✅ Add this
+    tags=["graph"]          # ✅ Add this
+)
 
 # Include all v1 routers
 router.include_router(

@@ -369,7 +369,13 @@ async def root():
 
 
 # Import and include routers
-from app.api.v1 import recommendations, users, papers, interactions
+from app.api.v1 import graph, recommendations, users, papers, interactions
+
+app.include_router(
+    graph.router,
+    prefix=f"{settings.API_V1_PREFIX}/graph",
+    tags=["graph"]
+)
 
 app.include_router(
     recommendations.router,
