@@ -418,7 +418,6 @@ async def build_report() -> Dict[str, Any]:
                 )
 
                 metrics = eval_payload.get("aggregate_metrics", {}) or {}
-
                 # Log metrics to MLflow (only numeric)
                 numeric_metrics = {
                     k: float(v)
