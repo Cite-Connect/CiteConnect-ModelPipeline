@@ -515,7 +515,7 @@ class GraphService:
         
         # Get paper details for domain filtering
         try:
-            paper = await self.paper_repo.get_paper(paper_id)
+            paper = await self.paper_repo.find_by_paper_id(paper_id)
             if not paper:
                 logger.warning("Paper not found", paper_id=paper_id)
                 return []
