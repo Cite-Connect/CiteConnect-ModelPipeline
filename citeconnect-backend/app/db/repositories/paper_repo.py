@@ -212,7 +212,91 @@ class PaperRepository(BaseRepository):
                 exc_info=True
             )
             raise
-    
+    async def semantic_search(
+        self,
+        embedding: np.ndarray,
+        model: str = 'minilm',
+        domain: Optional[str] = None,
+        limit: int = 50,
+        min_similarity: float = 0.3
+    ) -> List[Dict]:
+        """
+        Semantic search using vector similarity.
+        
+        Args:
+            embedding: Query embedding vector
+            model: Model name ('minilm' or 'specter')
+            domain: Optional domain filter
+            limit: Maximum results
+            min_similarity: Minimum similarity threshold
+            
+        Returns:
+            List[Dict]: Papers ranked by semantic similarity
+        """
+        logger.debug(
+            "Performing semantic search",
+            model=model,
+            domain=domain,
+            limit=limit
+        )
+        
+        # Determine embedding table
+        embedding_table = f'paper_embeddings_{model}'
+        
+        # Convert embedding to PostgreSQL vector format
+        embedding_str = '[' + ','.join(map(str, embedding.tolist())) + ']'
+        
+        # Build query
+        query = f"""
+            SELECT 
+                p.paper_id,
+                p.title,
+                p.abstract,
+                p.authors,
+                p.year,
+                p.citation_count,
+                p.domain,
+                p.sub_domains,
+                p.venue,
+                p.reference_ids,
+                1 - (pe.embedding <=> $1::vector) as similarity
+            FROM papers p
+            JOIN {embedding_table} pe ON p.paper_id = pe.paper_id
+            WHERE 1 - (pe.embedding <=> $1::vector) >= $2
+        """
+        
+        params = [embedding_str, min_similarity]
+        
+        if domain:
+            query += f" AND p.domain = ${len(params) + 1}"
+            params.append(domain)
+        
+        query += f" ORDER BY pe.embedding <=> $1::vector LIMIT ${len(params) + 1}"
+        params.append(limit)
+        
+        try:
+            results = await self.db.fetch(query, *params)
+            papers = [dict(row) for row in results]
+            
+            logger.info(
+                "Semantic search complete",
+                model=model,
+                domain=domain,
+                results=len(papers),
+                avg_similarity=np.mean([p['similarity'] for p in papers]) if papers else 0
+            )
+            
+            return papers
+            
+        except Exception as e:
+            logger.error(
+                "Semantic search failed",
+                model=model,
+                error=str(e),
+                exc_info=True
+            )
+            raise
+
     async def get_paper_citations(
         self,
         paper_id: str

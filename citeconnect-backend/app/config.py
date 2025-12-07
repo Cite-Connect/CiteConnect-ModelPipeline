@@ -6,7 +6,7 @@ import structlog
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
-
+from pydantic import Field
 
 logger = structlog.get_logger(__name__)
 
@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     
     # API
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000", "https://pulp-three.vercel.app"]
     
     # Database - Supabase PostgreSQL
     SUPABASE_URL: str
@@ -130,6 +130,50 @@ class Settings(BaseSettings):
     ALLOWED_READING_LEVELS: list[str] = ['introductory', 'intermediate', 'advanced', 'expert']
     ALLOWED_TIME_AVAILABILITY: list[str] = ['casual_reader', 'part_time_researcher', 'full_time_researcher']
 
+    # Graph Generation Settings
+    GRAPH_SEMANTIC_MIN_SIMILARITY: float = Field(
+        default=0.5,
+        env="GRAPH_SEMANTIC_MIN_SIMILARITY",
+        description="Minimum cosine similarity threshold for semantic matching (0-1)"
+    )
+    
+    GRAPH_SEMANTIC_LIMIT: int = Field(
+        default=20,
+        env="GRAPH_SEMANTIC_LIMIT",
+        description="Maximum number of semantic similar papers to retrieve"
+    )
+    
+    GRAPH_HYBRID_TRIGGER_THRESHOLD: int = Field(
+        default=5,
+        env="GRAPH_HYBRID_TRIGGER_THRESHOLD",
+        description="Minimum citation nodes before triggering semantic fallback"
+    )
+    
+    GRAPH_DEFAULT_MODEL: str = Field(
+        default="minilm",
+        env="GRAPH_DEFAULT_MODEL",
+        description="Default embedding model for semantic similarity (minilm or specter)"
+    )
+    
+    GRAPH_DOMAIN_YEAR_RANGE: int = Field(
+        default=3,
+        env="GRAPH_DOMAIN_YEAR_RANGE",
+        description="Year range (+/-) for domain filtering fallback"
+    )
+
+    # Embedding Model Configuration
+    EMBEDDING_MODELS: dict = {
+        "minilm": {
+            "table": "paper_embeddings_minilm",
+            "dimension": 384,
+            "name": "all-MiniLM-L6-v2"
+        },
+        "specter": {
+            "table": "paper_embeddings_specter",
+            "dimension": 768,
+            "name": "allenai/specter2"
+        }
+    }
 
 @lru_cache()
 def get_settings() -> Settings:

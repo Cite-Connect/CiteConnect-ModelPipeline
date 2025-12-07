@@ -177,10 +177,10 @@ async def compute_ground_truth_relationships():
                 )
                 SELECT co_cited_paper
                 FROM co_cited_counts
-                WHERE co_citation_count >= 3
+                WHERE co_citation_count >= 2
                   AND co_cited_paper != $1
                 ORDER BY co_citation_count DESC
-                LIMIT 50
+                LIMIT 100
             """
             
             co_cited_results = await db.fetch(co_cited_query, paper_id)
@@ -206,9 +206,9 @@ async def compute_ground_truth_relationships():
                 )
                 SELECT couple_paper
                 FROM couple_counts
-                WHERE shared_refs >= 3
+                WHERE shared_refs >= 2
                 ORDER BY shared_refs DESC
-                LIMIT 50
+                LIMIT 100
             """
             
             bib_couple_results = await db.fetch(bib_couple_query, paper_id)
@@ -298,7 +298,7 @@ async def identify_canonical_papers():
                     'foundational',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    datetime.utcnow()
+                    datetime.now()  # ✅ Pass datetime, not int
                 )
                 
                 logger.debug(
@@ -332,7 +332,7 @@ async def identify_canonical_papers():
                     'recent',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    result['count']
+                    datetime.now()
                 )
                 
                 logger.debug(
@@ -370,7 +370,7 @@ async def identify_canonical_papers():
                     'trending',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    result['count']
+                    datetime.now()
                 )
                 
                 logger.debug(
