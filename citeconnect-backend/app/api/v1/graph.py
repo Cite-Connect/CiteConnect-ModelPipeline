@@ -15,7 +15,6 @@ logger = structlog.get_logger()
 
 router = APIRouter()
 
-
 # Response models
 class GraphNode(BaseModel):
     """Node in citation graph."""
@@ -58,6 +57,8 @@ class GraphMetadata(BaseModel):
     depth: int
     total_nodes: int
     total_edges: int
+    has_semantic_fallback: Optional[bool] = False
+    embedding_model_used: Optional[str] = None  # NEW: Track which model was used
 
 
 class CitationGraphResponse(BaseModel):
@@ -102,7 +103,6 @@ async def get_citation_network(
         True,
         description="Include full paper metadata in nodes"
     ),
-    # current_user: dict = Depends(get_current_user),
     db: DatabaseConnection = Depends(get_db)
 ):
     """
@@ -119,6 +119,15 @@ async def get_citation_network(
     - `co_cited`: Papers frequently co-cited with this one (light teal)
     - `bibliographic_couple`: Papers sharing references (yellow)
     
+    **Frontend Integration:**
+    ```javascript
+    // After user clicks on a recommended paper
+    const response = await fetch(`/api/v1/graph/citation-network/${paperId}?depth=1&max_nodes=50`);
+    const graphData = await response.json();
+    
+    // Render with D3.js, Cytoscape, or vis.js
+    renderGraph(graphData.nodes, graphData.edges);
+    ```
     
     **Parameters:**
     - `paper_id`: The paper to center the graph around
@@ -136,7 +145,6 @@ async def get_citation_network(
         logger.info(
             "Fetching citation network",
             paper_id=paper_id,
-            # user_id=current_user['user_id'],
             depth=depth,
             max_nodes=max_nodes
         )
