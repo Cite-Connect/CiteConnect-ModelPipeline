@@ -1,0 +1,266 @@
+{
+  "generated_at": "2025-12-07T17:30:49.438389",
+  "mode": "cold_start",
+  "model": "minilm",
+  "performance_mode": "ultra_fast",
+  "search_space": {
+    "semantic": [
+      0.35,
+      0.4,
+      0.45
+    ],
+    "citation": [
+      0.15,
+      0.2,
+      0.25
+    ],
+    "recency": [
+      0.15
+    ],
+    "ground_truth": [
+      0.1
+    ],
+    "reading_level": [
+      0.1
+    ],
+    "diversity": [
+      0.05
+    ]
+  },
+  "strategy": "grid_search_normalized",
+  "objective": "max avg_combined_score over sampled cold-start users",
+  "user_sample_size": 3,
+  "num_configurations": 9,
+  "best_config": {
+    "name": "cfg_007",
+    "weights": {
+      "semantic": 0.45,
+      "citation": 0.15,
+      "recency": 0.15,
+      "ground_truth": 0.1,
+      "reading_level": 0.1,
+      "diversity": 0.05
+    },
+    "metrics": {
+      "avg_profile_alignment": 0.45,
+      "avg_ground_truth_quality": 0.0,
+      "avg_combined_score": 0.27,
+      "std_profile_alignment": 0.0567,
+      "std_ground_truth_quality": 0.0,
+      "std_combined_score": 0.034,
+      "min_combined_score": 0.236,
+      "max_combined_score": 0.304,
+      "pass_rate": 0.0
+    },
+    "total_users": 3
+  },
+  "all_results": [
+    {
+      "name": "cfg_001",
+      "weights": {
+        "semantic": 0.38888888888888884,
+        "citation": 0.16666666666666666,
+        "recency": 0.16666666666666666,
+        "ground_truth": 0.11111111111111112,
+        "reading_level": 0.11111111111111112,
+        "diversity": 0.05555555555555556
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.41,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.246,
+        "std_profile_alignment": 0.0685,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0411,
+        "min_combined_score": 0.214,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_002",
+      "weights": {
+        "semantic": 0.36842105263157887,
+        "citation": 0.21052631578947367,
+        "recency": 0.15789473684210525,
+        "ground_truth": 0.10526315789473684,
+        "reading_level": 0.10526315789473684,
+        "diversity": 0.05263157894736842
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.4022,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.2413,
+        "std_profile_alignment": 0.0751,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0451,
+        "min_combined_score": 0.2,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_003",
+      "weights": {
+        "semantic": 0.35,
+        "citation": 0.25,
+        "recency": 0.15,
+        "ground_truth": 0.1,
+        "reading_level": 0.1,
+        "diversity": 0.05
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.3844,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.2307,
+        "std_profile_alignment": 0.0868,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0521,
+        "min_combined_score": 0.188,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_004",
+      "weights": {
+        "semantic": 0.42105263157894735,
+        "citation": 0.15789473684210525,
+        "recency": 0.15789473684210525,
+        "ground_truth": 0.10526315789473684,
+        "reading_level": 0.10526315789473684,
+        "diversity": 0.05263157894736842
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.4189,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.2513,
+        "std_profile_alignment": 0.0639,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0383,
+        "min_combined_score": 0.214,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_005",
+      "weights": {
+        "semantic": 0.4,
+        "citation": 0.2,
+        "recency": 0.15,
+        "ground_truth": 0.1,
+        "reading_level": 0.1,
+        "diversity": 0.05
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.4367,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.262,
+        "std_profile_alignment": 0.07,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.042,
+        "min_combined_score": 0.22,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_006",
+      "weights": {
+        "semantic": 0.38095238095238093,
+        "citation": 0.23809523809523808,
+        "recency": 0.14285714285714285,
+        "ground_truth": 0.09523809523809523,
+        "reading_level": 0.09523809523809523,
+        "diversity": 0.047619047619047616
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.4367,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.262,
+        "std_profile_alignment": 0.07,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.042,
+        "min_combined_score": 0.22,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_007",
+      "weights": {
+        "semantic": 0.45,
+        "citation": 0.15,
+        "recency": 0.15,
+        "ground_truth": 0.1,
+        "reading_level": 0.1,
+        "diversity": 0.05
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.45,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.27,
+        "std_profile_alignment": 0.0567,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.034,
+        "min_combined_score": 0.236,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_008",
+      "weights": {
+        "semantic": 0.42857142857142855,
+        "citation": 0.19047619047619047,
+        "recency": 0.14285714285714285,
+        "ground_truth": 0.09523809523809523,
+        "reading_level": 0.09523809523809523,
+        "diversity": 0.047619047619047616
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.41,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.246,
+        "std_profile_alignment": 0.0685,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0411,
+        "min_combined_score": 0.214,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    },
+    {
+      "name": "cfg_009",
+      "weights": {
+        "semantic": 0.40909090909090906,
+        "citation": 0.22727272727272727,
+        "recency": 0.13636363636363635,
+        "ground_truth": 0.09090909090909091,
+        "reading_level": 0.09090909090909091,
+        "diversity": 0.045454545454545456
+      },
+      "metrics": {
+        "avg_profile_alignment": 0.4367,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.262,
+        "std_profile_alignment": 0.07,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.042,
+        "min_combined_score": 0.22,
+        "max_combined_score": 0.304,
+        "pass_rate": 0.0
+      },
+      "total_users": 3
+    }
+  ]
+}
