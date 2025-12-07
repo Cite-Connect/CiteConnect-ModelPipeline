@@ -345,7 +345,7 @@ class GraphService:
                 'domain': paper.get('domain'),
                 'authors': paper.get('authors', [])[:3],  # First 3 authors
                 'venue': paper.get('venue'),
-                'abstract': paper.get('abstract', '')[:200],  # First 200 chars
+                'abstract': (paper.get('abstract') or '')[:200],  # Handle None, first 200 chars
                 # Visual properties based on type
                 'size': self._calculate_node_size(
                     paper.get('citation_count', 0),
