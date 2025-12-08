@@ -9,7 +9,7 @@ name: Deploy Dev
 
 env:
   PROJECT_ID: strange-calling-476017-r5
-  SERVICE_NAME: citeconnect-backend-api-dev
+  SERVICE_NAME: citeconnect-backend-api
   REGION: us-central1
 
 jobs:
