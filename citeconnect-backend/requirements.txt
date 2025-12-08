@@ -38,13 +38,13 @@ flower==2.0.1
 # The key is to let transformers be pulled by sentence-transformers
 # ============================================================================
 huggingface_hub==0.19.4
-sentence-transformers==2.2.2
+sentence-transformers
 transformers==4.30.2
 tokenizers==0.13.3
-torch>=1.9.0,<2.0.0
+torch
 
 # transformers will be auto-installed by sentence-transformers (>=4.34.0,<5.0.0)
-torchvision==0.24.1
+torchvision
 numpy==1.26.4
 scikit-learn==1.5.2
 
