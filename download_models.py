@@ -1,10 +1,6 @@
 # download_models.py
 import os
 import sys
-import subprocess
-
-print('🔧 Installing compatible huggingface_hub version...')
-subprocess.check_call([sys.executable, '-m', 'pip', 'install', 'huggingface_hub==0.19.4'])
 
 from sentence_transformers import SentenceTransformer
 
