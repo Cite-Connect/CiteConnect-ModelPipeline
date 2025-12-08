@@ -13,8 +13,14 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements from citeconnect-backend directory
 COPY citeconnect-backend/requirements.txt .
 
-# Upgrade pip
 RUN pip install --upgrade pip
+
+RUN pip install --no-cache-dir \
+    torch>=1.9.0 \
+    huggingface_hub==0.16.4 \
+    transformers==4.21.3 \
+    tokenizers==0.12.1 \
+    sentence-transformers==2.2.2
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
