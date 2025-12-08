@@ -52,19 +52,8 @@ jobs:
           --port 8000 \
           --memory 4Gi \
           --cpu 2 \
-          --timeout 300 \
+          --timeout 900 \
           --allow-unauthenticated \
-          --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-          --set-env-vars SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-          --set-env-vars SUPABASE_KEY="${{ secrets.SUPABASE_KEY }}" \
-          --set-env-vars ENVIRONMENT="production" \
-          --set-env-vars DEBUG="false" \
-          --set-env-vars LOG_LEVEL="INFO" \
-          --set-env-vars APP_NAME="CiteConnect" \
-          --set-env-vars SECRET_KEY="${{ secrets.SECRET_KEY }}" \
-          --set-env-vars DEFAULT_EMBEDDING_MODEL="all-MiniLM-L6-v2" \
-          --set-env-vars MODEL_CACHE_DIR="./models" \
-          --set-env-vars API_V1_PREFIX="/api/v1"
 
     - name: Get service URL
       id: get_url
