@@ -3,6 +3,8 @@ Configuration management for CiteConnect backend.
 Loads settings from environment variables with validation.
 """
 import structlog
+import os
+from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
@@ -10,13 +12,17 @@ from pydantic import Field
 
 logger = structlog.get_logger(__name__)
 
+# Resolve .env file path relative to this config file
+# This ensures it works regardless of where the server is run from
+_config_dir = Path(__file__).parent.parent  # Go up from app/config.py to citeconnect-backend/
+_env_file = _config_dir / ".env"
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
 # --- IMPORTANT CHANGE HERE ---
     model_config = SettingsConfigDict(
-        env_file=".env",            # 👈 Tell Pydantic to load from a .env file
+        env_file=str(_env_file) if _env_file.exists() else ".env",  # Use absolute path if exists, else fallback
         env_file_encoding="utf-8",
         extra="allow"               # Kept your original 'extra: "allow"'
     )    
@@ -62,6 +68,10 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: Optional[str] = None
     GCP_BUCKET_NAME: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
+    
+    # LLM Services (OpenAI for query refinement)
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4o-mini"  # Cheapest OpenAI model. Options: gpt-4o-mini, gpt-3.5-turbo
     
     # Performance Thresholds
     COLD_START_PROFILE_ALIGNMENT_THRESHOLD: float = 0.6

@@ -135,6 +135,18 @@ class RecommendationMetadata(BaseModel):
     evaluation_scores: 'EvaluationScores'
     cache_hit: bool
     generation_time_ms: float
+    search_query: Optional[str] = Field(
+        None,
+        description="Original search query (if search-augmented mode was used)"
+    )
+    refined_query: Optional[str] = Field(
+        None,
+        description="LLM-refined search query (if LLM refinement was used)"
+    )
+    llm_refinement_used: bool = Field(
+        False,
+        description="Whether LLM query refinement was applied"
+    )
     
     model_config = {"protected_namespaces": ()}  # Disable Pydantic model_ namespace protection
 
