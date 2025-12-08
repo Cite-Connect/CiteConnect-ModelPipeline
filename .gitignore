@@ -35,6 +35,8 @@ env.py
 /env.py
 .env.bak
 
+*/.env.bak
+github-actions-key.json
 # IDE
 .vscode/
 .idea/
