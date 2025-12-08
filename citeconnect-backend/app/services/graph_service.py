@@ -115,7 +115,8 @@ class GraphService:
                         'target': cited_id,
                         'type': 'cites',
                         'strength': 1.0,
-                        'label': 'cites'
+                        'label': 'cites',
+                        'distance': 50  # Direct citations close
                     })
                     visited.add(cited_id)
         
@@ -137,7 +138,8 @@ class GraphService:
                         'target': co_cited_id,
                         'type': 'co_cited',
                         'strength': 0.7,
-                        'label': 'frequently co-cited with'
+                        'label': 'frequently co-cited with',
+                        'distance': 120
                     })
                     visited.add(co_cited_id)
         
@@ -159,7 +161,8 @@ class GraphService:
                         'target': couple_id,
                         'type': 'bibliographic_coupling',
                         'strength': 0.5,
-                        'label': 'shares references with'
+                        'label': 'shares references with',
+                        'distance': 150
                     })
                     visited.add(couple_id)
         
@@ -192,7 +195,7 @@ class GraphService:
                 logger.info(
                     "Semantic fallback completed",
                     final_node_count=len(nodes),
-                    semantic_nodes_added=len(nodes) - len(list(nodes.values()))
+                    semantic_nodes_added=len([n for n in nodes.values() if n['type'] == 'semantic_similar'])
                 )
             except Exception as e:
                 logger.error(
@@ -206,6 +209,23 @@ class GraphService:
                 node_count=len(nodes),
                 threshold=self.hybrid_threshold
             )
+        
+        # NEW: Add cross-paper connections for network topology
+        if len(nodes) > 3:  # Only if we have enough nodes
+            try:
+                logger.info("Adding cross-paper connections")
+                edges = await self._add_semantic_bridges(
+                    nodes,
+                    edges,
+                    embedding_model,
+                    max_bridges=20
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to add semantic bridges",
+                    error=str(e),
+                    exc_info=True
+                )
         
         # Calculate graph statistics
         stats = self._calculate_graph_stats(nodes, edges, gt_relationships)
@@ -345,7 +365,7 @@ class GraphService:
                 'domain': paper.get('domain'),
                 'authors': paper.get('authors', [])[:3],  # First 3 authors
                 'venue': paper.get('venue'),
-                'abstract': paper.get('abstract', '')[:200],  # First 200 chars
+                'abstract': (paper.get('abstract') or '')[:200],  # Handle None, first 200 chars
                 # Visual properties based on type
                 'size': self._calculate_node_size(
                     paper.get('citation_count', 0),
@@ -515,7 +535,7 @@ class GraphService:
         
         # Get paper details for domain filtering
         try:
-            paper = await self.paper_repo.get_paper(paper_id)
+            paper = await self.paper_repo.find_by_paper_id(paper_id)
             if not paper:
                 logger.warning("Paper not found", paper_id=paper_id)
                 return []
@@ -754,7 +774,11 @@ class GraphService:
                     'target': sim_paper['paper_id'],
                     'type': 'semantic_similarity',
                     'strength': float(sim_paper.get('similarity_score', 0.5)),
-                    'label': f"{int(sim_paper.get('similarity_score', 0.5) * 100)}% similar"
+                    'label': f"{int(sim_paper.get('similarity_score', 0.5) * 100)}% similar",
+                    'distance': self._calculate_edge_distance(
+                        float(sim_paper.get('similarity_score', 0.5)),
+                        'semantic_similarity'
+                    )
                 })
                 
                 semantic_nodes_added += 1
@@ -770,3 +794,140 @@ class GraphService:
             'nodes': citation_nodes,
             'edges': citation_edges
         }
+    
+    async def _add_semantic_bridges(
+        self,
+        nodes: Dict,
+        edges: List[Dict],
+        embedding_model: str,
+        max_bridges: int = 20,
+        min_similarity: float = 0.75
+    ) -> List[Dict]:
+        """
+        Add connections between semantically similar papers in the graph.
+        Creates Connected Papers-style network topology.
+        
+        Args:
+            nodes: Graph nodes (dict of paper_id -> node)
+            edges: Existing edges
+            embedding_model: Embedding model to use
+            max_bridges: Maximum bridges to add
+            min_similarity: Minimum similarity for bridge (higher than fallback)
+        """
+        # Get semantic nodes (exclude central)
+        semantic_nodes = [
+            paper_id for paper_id, node in nodes.items()
+            if node['type'] == 'semantic_similar'
+        ]
+        
+        if len(semantic_nodes) < 2:
+            logger.debug("Not enough semantic nodes for bridges")
+            return edges
+        
+        model_config = self.embedding_models.get(embedding_model)
+        if not model_config:
+            logger.warning("Invalid model for bridges", model=embedding_model)
+            return edges
+        
+        table = model_config['table']
+        
+        logger.debug(
+            "Computing semantic bridges",
+            semantic_nodes=len(semantic_nodes),
+            min_similarity=min_similarity,
+            model=embedding_model
+        )
+        
+        # Query: Find similarity between all pairs of semantic nodes
+        query = f"""
+            WITH selected_papers AS (
+                SELECT paper_id, embedding
+                FROM {table}
+                WHERE paper_id = ANY($1::text[])
+            )
+            SELECT 
+                a.paper_id as paper1,
+                b.paper_id as paper2,
+                1 - (a.embedding <=> b.embedding) as similarity
+            FROM selected_papers a
+            CROSS JOIN selected_papers b
+            WHERE a.paper_id < b.paper_id
+              AND (1 - (a.embedding <=> b.embedding)) >= $2
+            ORDER BY similarity DESC
+            LIMIT $3
+        """
+        
+        try:
+            results = await self.db.fetch(
+                query,
+                semantic_nodes,
+                min_similarity,
+                max_bridges
+            )
+            
+            bridges_added = 0
+            for result in results:
+                edges.append({
+                    'source': result['paper1'],
+                    'target': result['paper2'],
+                    'type': 'semantic_bridge',
+                    'strength': float(result['similarity']),
+                    'label': f"{int(result['similarity'] * 100)}% similar",
+                    'distance': self._calculate_edge_distance(
+                        float(result['similarity']),
+                        'semantic_bridge'
+                    )
+                })
+                bridges_added += 1
+            
+            logger.info(
+                "Semantic bridges added",
+                count=bridges_added,
+                min_similarity=min_similarity
+            )
+            
+        except Exception as e:
+            logger.error(
+                "Failed to compute semantic bridges",
+                error=str(e),
+                exc_info=True
+            )
+        
+        return edges
+    
+    def _calculate_edge_distance(
+        self,
+        strength: float,
+        edge_type: str
+    ) -> int:
+        """
+        Calculate visual distance for edge based on relationship strength.
+        Higher strength → shorter distance (nodes closer together).
+        
+        Args:
+            strength: Relationship strength (0-1)
+            edge_type: Type of edge
+            
+        Returns:
+            Distance in pixels for frontend visualization
+        """
+        # Base distances by type
+        if edge_type == 'cites':
+            base = 50  # Direct citations very close
+        elif edge_type == 'co_cited':
+            base = 120
+        elif edge_type == 'bibliographic_coupling':
+            base = 150
+        elif edge_type == 'semantic_similarity':
+            base = 100
+        elif edge_type == 'semantic_bridge':
+            base = 130
+        else:
+            base = 100
+        
+        # Adjust by strength (inverse relationship)
+        # strength 1.0 → 0.5x base (very close)
+        # strength 0.5 → 1.5x base (far apart)
+        multiplier = 2.0 - strength
+        
+        return int(base * multiplier)
