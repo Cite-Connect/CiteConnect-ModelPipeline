@@ -38,6 +38,7 @@ flower==2.0.1
 # The key is to let transformers be pulled by sentence-transformers
 # ============================================================================
 sentence-transformers==2.2.2
+transformers>=4.32.0,<5.0.0
 # transformers will be auto-installed by sentence-transformers (>=4.34.0,<5.0.0)
 torch==2.9.1
 torchvision==0.24.1
