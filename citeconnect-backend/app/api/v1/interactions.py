@@ -1,14 +1,16 @@
 """
-Interaction tracking API endpoints.
-Handles user-paper interactions for personalization and evaluation.
+Complete interaction tracking endpoint with all table updates.
+Updates: user_interactions, user_recommendation_state (with stage transitions),
+user_saved_papers, user_liked_papers, user_paper_filters, and triggers embedding regeneration.
 """
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from typing import Optional
 from app.models.paper import PaperInteractionRequest
 from app.utils.logger import get_logger
 from app.db.connection import get_db, DatabaseConnection
 from app.db.repositories.interaction_repo import InteractionRepository
 from app.db.repositories.user_repo import UserRepository
+from app.services.user_embedding_service import UserEmbeddingService
 
 logger = get_logger(__name__)
 
@@ -18,15 +20,7 @@ router = APIRouter()
 def get_interaction_repo(
     db: DatabaseConnection = Depends(get_db)
 ) -> InteractionRepository:
-    """
-    Dependency to get interaction repository.
-    
-    Args:
-        db: Database connection
-        
-    Returns:
-        InteractionRepository: Interaction repository instance
-    """
+    """Dependency to get interaction repository."""
     return InteractionRepository(db)
 
 
@@ -35,43 +29,58 @@ def get_user_repo(db: DatabaseConnection = Depends(get_db)) -> UserRepository:
     return UserRepository(db)
 
 
+async def regenerate_embeddings_background(user_id: int, db: DatabaseConnection):
+    """Background task to regenerate user embeddings."""
+    try:
+        embedding_service = UserEmbeddingService(db)
+        await embedding_service.generate_user_embeddings(user_id)
+        logger.info("Background embedding regeneration complete", user_id=user_id)
+    except Exception as e:
+        logger.error(
+            "Background embedding regeneration failed",
+            user_id=user_id,
+            error=str(e),
+            exc_info=True
+        )
+
+
 @router.post(
     "",
     status_code=status.HTTP_201_CREATED,
-    summary="Track user-paper interaction",
+    summary="Track user-paper interaction with full table updates",
     description="""
-    Record a user interaction with a paper.
+    Record a user interaction and update all related tables:
     
-    Interaction types and their weights:
-    - **cite** (1.0): Strongest positive signal
-    - **save** (0.8): Very strong interest
-    - **download** (0.7): Strong interest
-    - **like** (0.6): Positive signal
-    - **click** (0.3): Mild interest
-    - **view** (0.2): Weak signal
-    - **dismiss** (-0.2): Mild negative
-    - **not_interested** (-0.5): Strong negative
+    **Tables Updated:**
+    1. user_interactions - records the interaction
+    2. user_recommendation_state - increments count, transitions stage
+    3. user_saved_papers - adds paper if interaction is 'save'
+    4. user_liked_papers - adds paper if interaction is 'like'
+    5. user_paper_filters - filters paper if negative interaction
+    6. user_embeddings_* - triggers regeneration every 5+ meaningful interactions
     
-    These signals are used to update user embeddings and improve recommendations.
+    **Interaction Types & Weights:**
+    - cite (1.0), save (0.8), download (0.7), like (0.6)
+    - click (0.3), view (0.2)
+    - dismiss (-0.2), not_interested (-0.5)
+    
+    **Stage Transitions:**
+    - cold_start (0-9) → early (10-49) → mature (50-199) → expert (200+)
     """
 )
 async def track_interaction(
     user_id: int,
     interaction_data: PaperInteractionRequest,
+    background_tasks: BackgroundTasks,
+    db: DatabaseConnection = Depends(get_db),
     interaction_repo: InteractionRepository = Depends(get_interaction_repo),
     user_repo: UserRepository = Depends(get_user_repo)
 ):
     """
-    Track user-paper interaction.
+    Track user-paper interaction with comprehensive table updates.
     
-    Args:
-        user_id: User identifier
-        interaction_data: Interaction details
-        interaction_repo: Interaction repository
-        user_repo: User repository
-        
-    Returns:
-        Interaction confirmation with embedding update status
+    This is the COMPLETE interaction handler that ensures all tables
+    stay synchronized with user behavior.
     """
     logger.info(
         "Interaction tracking request",
@@ -81,7 +90,9 @@ async def track_interaction(
     )
     
     try:
-        # Create interaction record
+        # =====================================================================
+        # STEP 1: Create interaction record
+        # =====================================================================
         interaction = await interaction_repo.create_interaction(
             user_id=user_id,
             paper_id=interaction_data.paper_id,
@@ -92,51 +103,128 @@ async def track_interaction(
             session_id=interaction_data.context.session_id if interaction_data.context else None
         )
         
-        # Increment user interaction count
+        logger.info(
+            "Interaction created",
+            user_id=user_id,
+            interaction_id=interaction['interaction_id'],
+            strength=interaction['interaction_strength']
+        )
+        
+        # =====================================================================
+        # STEP 2: Update user_recommendation_state
+        # (includes automatic stage transitions)
+        # =====================================================================
         state = await user_repo.get_recommendation_state(user_id)
+        
         if state:
             new_count = state.get('interaction_count', 0) + 1
+            
+            # Determine new stage based on interaction count
+            if new_count >= 200:
+                new_stage = 'expert'
+            elif new_count >= 50:
+                new_stage = 'mature'
+            elif new_count >= 10:
+                new_stage = 'early'
+            else:
+                new_stage = 'cold_start'
+            
+            old_stage = state.get('recommendation_stage', 'cold_start')
+            
+            # Update state with new count and stage
             await user_repo.update_recommendation_state(
                 user_id,
-                {'interaction_count': new_count}
-            )
-        
-        # Check if negative signal - add filter if needed
-        if interaction_data.interaction_type in ['dismiss', 'not_interested']:
-            await interaction_repo.add_paper_filter(
-                user_id=user_id,
-                paper_id=interaction_data.paper_id,
-                filter_type='not_interested',
-                reason=f"User {interaction_data.interaction_type}"
+                {
+                    'interaction_count': new_count,
+                    'recommendation_stage': new_stage
+                }
             )
             
+            # Log stage transition if it occurred
+            if new_stage != old_stage:
+                logger.info(
+                    "Stage transition occurred",
+                    user_id=user_id,
+                    old_stage=old_stage,
+                    new_stage=new_stage,
+                    interaction_count=new_count
+                )
+        
+        # =====================================================================
+        # STEP 3: Update specialized tables based on interaction type
+        # =====================================================================
+        
+        # 3A: Save to user_saved_papers
+        if interaction_data.interaction_type == 'save':
+            save_query = """
+                INSERT INTO user_saved_papers (user_id, paper_id, saved_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (user_id, paper_id) DO NOTHING
+            """
+            await db.execute(save_query, user_id, interaction_data.paper_id)
+            
             logger.info(
-                "Paper filtered due to negative interaction",
+                "Paper saved",
                 user_id=user_id,
                 paper_id=interaction_data.paper_id
             )
         
-        # Check if embedding update should be triggered
-        should_update = await interaction_repo.check_embedding_update_trigger(
-            user_id
-        )
+        # 3B: Add to user_liked_papers
+        if interaction_data.interaction_type == 'like':
+            like_query = """
+                INSERT INTO user_liked_papers (user_id, paper_id, liked_at)
+                VALUES ($1, $2, NOW())
+                ON CONFLICT (user_id, paper_id) DO NOTHING
+            """
+            await db.execute(like_query, user_id, interaction_data.paper_id)
+            
+            logger.info(
+                "Paper liked",
+                user_id=user_id,
+                paper_id=interaction_data.paper_id
+            )
+        
+        # 3C: Add negative filters
+        if interaction_data.interaction_type in ['dismiss', 'not_interested']:
+            filter_type = 'not_interested' if interaction_data.interaction_type == 'not_interested' else 'dismissed'
+            
+            await interaction_repo.add_paper_filter(
+                user_id=user_id,
+                paper_id=interaction_data.paper_id,
+                filter_type=filter_type,
+                reason=f"User {interaction_data.interaction_type}"
+            )
+            
+            logger.info(
+                "Paper filtered",
+                user_id=user_id,
+                paper_id=interaction_data.paper_id,
+                filter_type=filter_type
+            )
+        
+        # =====================================================================
+        # STEP 4: Check if embedding regeneration needed
+        # =====================================================================
+        should_update = await interaction_repo.check_embedding_update_trigger(user_id)
         
         if should_update:
             logger.info(
-                "Embedding update triggered",
-                user_id=user_id
+                "Embedding regeneration triggered",
+                user_id=user_id,
+                reason="5+ meaningful interactions since last update"
             )
-            # In production, this would queue a background task
-            # celery_app.send_task('update_user_embedding', args=[user_id])
+            
+            # Trigger background embedding regeneration
+            background_tasks.add_task(
+                regenerate_embeddings_background,
+                user_id,
+                db
+            )
         
-        logger.info(
-            "Interaction tracked successfully",
-            user_id=user_id,
-            paper_id=interaction_data.paper_id,
-            strength=interaction['interaction_strength']
-        )
-        
-        return {
+        # =====================================================================
+        # STEP 5: Build response
+        # =====================================================================
+        response = {
             "interaction_id": interaction['interaction_id'],
             "user_id": user_id,
             "paper_id": interaction_data.paper_id,
@@ -145,6 +233,30 @@ async def track_interaction(
             "embedding_update_triggered": should_update,
             "message": "Interaction tracked successfully"
         }
+        
+        # Add stage transition info if it occurred
+        if 'new_stage' in locals() and new_stage != old_stage:
+            response['stage_transition'] = {
+                'old_stage': old_stage,
+                'new_stage': new_stage,
+                'interaction_count': new_count
+            }
+        
+        logger.info(
+            "Interaction tracking complete",
+            user_id=user_id,
+            paper_id=interaction_data.paper_id,
+            updates_made={
+                'interaction_created': True,
+                'state_updated': True,
+                'paper_saved': interaction_data.interaction_type == 'save',
+                'paper_liked': interaction_data.interaction_type == 'like',
+                'paper_filtered': interaction_data.interaction_type in ['dismiss', 'not_interested'],
+                'embedding_queued': should_update
+            }
+        )
+        
+        return response
         
     except Exception as e:
         logger.error(

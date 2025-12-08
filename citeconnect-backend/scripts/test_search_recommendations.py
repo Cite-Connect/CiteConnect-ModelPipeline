@@ -15,10 +15,10 @@ def test_search_augmented():
     print("=" * 70)
     
     payload = {
-        "user_id": 2,
+        "user_id": 14,
         "count": 5,
         "model_preference": "minilm",
-        "search_query": "neural networks for brain segmentation",
+        "search_query": "trustworthy AI in healthcare applications",
         "session_id": "test-search-001"
     }
     

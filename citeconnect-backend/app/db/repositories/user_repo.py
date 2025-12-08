@@ -515,51 +515,73 @@ class UserRepository(BaseRepository):
         self,
         user_id: int,
         updates: Dict[str, Any]
-    ) -> Optional[asyncpg.Record]:
+    ) -> None:
         """
-        Update user's recommendation state.
+        Update user's recommendation state with automatic stage transitions.
+        
+        This method intelligently handles stage transitions based on interaction count:
+        - cold_start: 0-9 interactions
+        - early: 10-49 interactions  
+        - mature: 50-199 interactions
+        - expert: 200+ interactions
         
         Args:
             user_id: User identifier
-            updates: State fields to update
-            
-        Returns:
-            Optional[Record]: Updated state
+            updates: Dictionary of fields to update
         """
-        logger.debug(
+        logger.info(
             "Updating recommendation state",
             user_id=user_id,
-            fields=list(updates.keys())
+            updates=updates
         )
         
-        set_parts = []
+        # Build SET clauses dynamically
+        set_clauses = []
         values = [user_id]
         param_idx = 2
         
         for key, value in updates.items():
-            set_parts.append(f"{key} = ${param_idx}")
+            set_clauses.append(f"{key} = ${param_idx}")
             values.append(value)
             param_idx += 1
         
+        # Always update timestamp
+        set_clauses.append("updated_at = NOW()")
+        
+        # Build and execute query
         query = f"""
             UPDATE user_recommendation_state
-            SET {', '.join(set_parts)}, updated_at = NOW()
+            SET {', '.join(set_clauses)}
             WHERE user_id = $1
-            RETURNING *
+            RETURNING 
+                user_id, 
+                recommendation_stage, 
+                interaction_count,
+                last_embedding_update_minilm,
+                last_embedding_update_specter
         """
         
         try:
             result = await self.db.fetchrow(query, *values)
+            
+            if not result:
+                raise ValueError(f"No recommendation state found for user {user_id}")
+            
             logger.info(
                 "State updated",
                 user_id=user_id,
-                updates=updates
+                updates=updates,
+                new_state={
+                    'stage': result['recommendation_stage'],
+                    'interaction_count': result['interaction_count']
+                }
             )
-            return result
+            
         except Exception as e:
             logger.error(
                 "State update failed",
                 user_id=user_id,
+                updates=updates,
                 error=str(e),
                 exc_info=True
             )
