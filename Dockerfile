@@ -10,16 +10,16 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements from citeconnect-backend directory (assuming it's there)
+# Copy requirements from citeconnect-backend directory
 COPY citeconnect-backend/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the entire citeconnect-backend directory
-COPY citeconnect-backend/ ./citeconnect-backend/
+# Copy the contents of citeconnect-backend directly to /app (not as subdirectory)
+COPY citeconnect-backend/ .
 
-# Copy download_models.py from root (make sure this file exists)
+# Copy download_models.py from root
 COPY download_models.py .
 
 # Create directories for models and logs
@@ -44,5 +44,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 
-# Run application - pointing to the correct module path
-CMD ["uvicorn", "citeconnect-backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info", "--access-log"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Now the module path is simply app.main:app (not citeconnect-backend.app.main:app)
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info --access-log"]
