@@ -367,23 +367,20 @@ async def root():
         "health": "/health"
     }
 
-@app.get("/debug/load-test")
-async def debug_load_test():
+@app.get("/debug/embedding-service")
+async def debug_embedding_service():
+    import traceback
     try:
-        from sentence_transformers import SentenceTransformer
-        
-        # Test loading the exact models that exist
-        model1 = SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2')
-        model2 = SentenceTransformer('allenai/specter2_base')
+        from app.services.bootstrap.embedding_service import EmbeddingService
+        service = EmbeddingService()
         
         return {
-            "minilm_loaded": True,
-            "specter_loaded": True,
-            "minilm_dims": len(model1.encode("test")),
-            "specter_dims": len(model2.encode("test"))
+            "service_initialized": True,
+            "models_loaded": list(service.models.keys()),
+            "health_check": service.health_check()
         }
     except Exception as e:
-        return {"error": str(e), "loaded": False}
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 # Import and include routers
 from app.api.v1 import graph, recommendations, users, papers, interactions
