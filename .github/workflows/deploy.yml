@@ -1,10 +1,12 @@
 ---
 name: Deploy Dev
 
-"on":
+on:
   push:
-    branches:
-      - 'feature/user-embedding-generation-v2'
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+    types: [ closed ]
   workflow_dispatch:
 
 env:
