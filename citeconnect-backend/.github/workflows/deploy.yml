@@ -52,7 +52,7 @@ jobs:
           --port 8000 \
           --memory 4Gi \
           --cpu 2 \
-          --timeout 990 \
+          --timeout 1200 \
           --max-instances 10 \
           --execution-environment gen2 \
           --cpu-throttling \
