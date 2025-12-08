@@ -49,7 +49,6 @@ jobs:
           --image $IMAGE_NAME:$GITHUB_SHA \
           --region $REGION \
           --platform managed \
-          --port 8000 \
           --memory 4Gi \
           --cpu 2 \
           --timeout 1200 \
