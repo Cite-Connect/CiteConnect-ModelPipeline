@@ -451,7 +451,57 @@ class PaperRepository(BaseRepository):
                 exc_info=True
             )
             raise
-    
+    async def _get_paper_embeddings(
+        self,
+        paper_ids: List[str],
+        model: str
+    ) -> Dict[str, np.ndarray]:
+        """
+        Batch fetch embeddings for multiple papers.
+        
+        Args:
+            paper_ids: List of paper IDs
+            model: Model name ('minilm' or 'specter')
+            
+        Returns:
+            Dict mapping paper_id to embedding vector
+        """
+        if not paper_ids:
+            return {}
+        
+        # Map model to table
+        table_map = {
+            'minilm': 'paper_embeddings_minilm',
+            'specter': 'paper_embeddings_specter',
+            'all-MiniLM-L6-v2': 'paper_embeddings_minilm',
+            'specter2': 'paper_embeddings_specter'
+        }
+        
+        table = table_map.get(model, 'paper_embeddings_minilm')
+        
+        query = f"""
+            SELECT paper_id, embedding
+            FROM {table}
+            WHERE paper_id = ANY($1::text[])
+        """
+        
+        results = await self.db.fetch(query, paper_ids)
+        
+        # Convert to dict
+        embeddings = {}
+        for row in results:
+            # Convert PostgreSQL vector to numpy array
+            embedding_list = row['embedding']
+            embeddings[row['paper_id']] = np.array(embedding_list)
+        
+        logger.debug(
+            "Paper embeddings fetched",
+            model=model,
+            requested=len(paper_ids),
+            found=len(embeddings)
+        )
+        
+        return embeddings
     async def update_quality_score(
         self,
         paper_id: str,
