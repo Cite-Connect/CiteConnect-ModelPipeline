@@ -1,7 +1,8 @@
 {
-  "generated_at": "2025-12-07T08:12:26.817147",
+  "generated_at": "2025-12-07T17:30:49.438389",
   "mode": "cold_start",
   "model": "minilm",
+  "performance_mode": "ultra_fast",
   "search_space": {
     "semantic": [
       0.35,
@@ -28,7 +29,7 @@
   },
   "strategy": "grid_search_normalized",
   "objective": "max avg_combined_score over sampled cold-start users",
-  "user_sample_size": 5,
+  "user_sample_size": 3,
   "num_configurations": 9,
   "best_config": {
     "name": "cfg_007",
@@ -41,17 +42,17 @@
       "diversity": 0.05
     },
     "metrics": {
-      "avg_profile_alignment": 0.4829,
-      "avg_ground_truth_quality": 0.005,
-      "avg_combined_score": 0.2918,
-      "std_profile_alignment": 0.0539,
-      "std_ground_truth_quality": 0.0087,
-      "std_combined_score": 0.0345,
+      "avg_profile_alignment": 0.45,
+      "avg_ground_truth_quality": 0.0,
+      "avg_combined_score": 0.27,
+      "std_profile_alignment": 0.0567,
+      "std_ground_truth_quality": 0.0,
+      "std_combined_score": 0.034,
       "min_combined_score": 0.236,
-      "max_combined_score": 0.33,
+      "max_combined_score": 0.304,
       "pass_rate": 0.0
     },
-    "total_users": 5
+    "total_users": 3
   },
   "all_results": [
     {
@@ -65,17 +66,17 @@
         "diversity": 0.05555555555555556
       },
       "metrics": {
-        "avg_profile_alignment": 0.4704,
-        "avg_ground_truth_quality": 0.005,
-        "avg_combined_score": 0.2842,
-        "std_profile_alignment": 0.0602,
-        "std_ground_truth_quality": 0.0087,
-        "std_combined_score": 0.0377,
-        "min_combined_score": 0.22,
-        "max_combined_score": 0.316,
+        "avg_profile_alignment": 0.41,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.246,
+        "std_profile_alignment": 0.0685,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0411,
+        "min_combined_score": 0.214,
+        "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_002",
@@ -88,17 +89,17 @@
         "diversity": 0.05263157894736842
       },
       "metrics": {
-        "avg_profile_alignment": 0.4646,
-        "avg_ground_truth_quality": 0.003,
-        "avg_combined_score": 0.2799,
-        "std_profile_alignment": 0.0568,
-        "std_ground_truth_quality": 0.0052,
-        "std_combined_score": 0.0347,
-        "min_combined_score": 0.22,
+        "avg_profile_alignment": 0.4022,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.2413,
+        "std_profile_alignment": 0.0751,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0451,
+        "min_combined_score": 0.2,
         "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_003",
@@ -111,17 +112,17 @@
         "diversity": 0.05
       },
       "metrics": {
-        "avg_profile_alignment": 0.4289,
-        "avg_ground_truth_quality": 0.002,
-        "avg_combined_score": 0.2581,
-        "std_profile_alignment": 0.0834,
-        "std_ground_truth_quality": 0.0028,
-        "std_combined_score": 0.0504,
+        "avg_profile_alignment": 0.3844,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.2307,
+        "std_profile_alignment": 0.0868,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0521,
         "min_combined_score": 0.188,
         "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_004",
@@ -134,17 +135,17 @@
         "diversity": 0.05263157894736842
       },
       "metrics": {
-        "avg_profile_alignment": 0.4704,
-        "avg_ground_truth_quality": 0.005,
-        "avg_combined_score": 0.2842,
-        "std_profile_alignment": 0.0602,
-        "std_ground_truth_quality": 0.0087,
-        "std_combined_score": 0.0377,
-        "min_combined_score": 0.22,
-        "max_combined_score": 0.316,
+        "avg_profile_alignment": 0.4189,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.2513,
+        "std_profile_alignment": 0.0639,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0383,
+        "min_combined_score": 0.214,
+        "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_005",
@@ -157,17 +158,17 @@
         "diversity": 0.05
       },
       "metrics": {
-        "avg_profile_alignment": 0.4646,
-        "avg_ground_truth_quality": 0.003,
-        "avg_combined_score": 0.2799,
-        "std_profile_alignment": 0.0568,
-        "std_ground_truth_quality": 0.0052,
-        "std_combined_score": 0.0347,
+        "avg_profile_alignment": 0.4367,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.262,
+        "std_profile_alignment": 0.07,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.042,
         "min_combined_score": 0.22,
         "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_006",
@@ -180,17 +181,17 @@
         "diversity": 0.047619047619047616
       },
       "metrics": {
-        "avg_profile_alignment": 0.4646,
-        "avg_ground_truth_quality": 0.003,
-        "avg_combined_score": 0.2799,
-        "std_profile_alignment": 0.0568,
-        "std_ground_truth_quality": 0.0052,
-        "std_combined_score": 0.0347,
+        "avg_profile_alignment": 0.4367,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.262,
+        "std_profile_alignment": 0.07,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.042,
         "min_combined_score": 0.22,
         "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_007",
@@ -203,17 +204,17 @@
         "diversity": 0.05
       },
       "metrics": {
-        "avg_profile_alignment": 0.4829,
-        "avg_ground_truth_quality": 0.005,
-        "avg_combined_score": 0.2918,
-        "std_profile_alignment": 0.0539,
-        "std_ground_truth_quality": 0.0087,
-        "std_combined_score": 0.0345,
+        "avg_profile_alignment": 0.45,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.27,
+        "std_profile_alignment": 0.0567,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.034,
         "min_combined_score": 0.236,
-        "max_combined_score": 0.33,
+        "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_008",
@@ -226,17 +227,17 @@
         "diversity": 0.047619047619047616
       },
       "metrics": {
-        "avg_profile_alignment": 0.4704,
-        "avg_ground_truth_quality": 0.005,
-        "avg_combined_score": 0.2842,
-        "std_profile_alignment": 0.0602,
-        "std_ground_truth_quality": 0.0087,
-        "std_combined_score": 0.0377,
-        "min_combined_score": 0.22,
-        "max_combined_score": 0.316,
+        "avg_profile_alignment": 0.41,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.246,
+        "std_profile_alignment": 0.0685,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.0411,
+        "min_combined_score": 0.214,
+        "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     },
     {
       "name": "cfg_009",
@@ -249,17 +250,17 @@
         "diversity": 0.045454545454545456
       },
       "metrics": {
-        "avg_profile_alignment": 0.4545,
-        "avg_ground_truth_quality": 0.004,
-        "avg_combined_score": 0.2743,
-        "std_profile_alignment": 0.0624,
-        "std_ground_truth_quality": 0.0057,
-        "std_combined_score": 0.0384,
+        "avg_profile_alignment": 0.4367,
+        "avg_ground_truth_quality": 0.0,
+        "avg_combined_score": 0.262,
+        "std_profile_alignment": 0.07,
+        "std_ground_truth_quality": 0.0,
+        "std_combined_score": 0.042,
         "min_combined_score": 0.22,
         "max_combined_score": 0.304,
         "pass_rate": 0.0
       },
-      "total_users": 5
+      "total_users": 3
     }
   ]
 }

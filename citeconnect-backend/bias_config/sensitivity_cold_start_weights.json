@@ -1,5 +1,5 @@
 {
-  "generated_at": "2025-12-07T22:48:01.144787",
+  "generated_at": "2025-12-07T22:28:15.734003",
   "baseline_weights": {
     "semantic": 0.45,
     "citation": 0.15,
@@ -19,9 +19,9 @@
         "diversity": 0.05
       },
       "metrics": {
-        "mean_final_score": 0.5261988133358086,
-        "std_final_score": 0.10617106468223207,
-        "mean_user_score": 0.5261988133358086,
+        "mean_final_score": 0.5253877313850733,
+        "std_final_score": 0.10696186343307117,
+        "mean_user_score": 0.5253877313850733,
         "user_count": 1,
         "total_recommendations": 10
       }
@@ -36,9 +36,9 @@
         "diversity": 0.045871559633027525
       },
       "metrics": {
-        "mean_final_score": 0.5151800079731853,
-        "std_final_score": 0.12174431702268818,
-        "mean_user_score": 0.5151800079731853,
+        "mean_final_score": 0.5096298597086406,
+        "std_final_score": 0.12722058420665555,
+        "mean_user_score": 0.5096298597086406,
         "user_count": 1,
         "total_recommendations": 10
       }
@@ -53,9 +53,9 @@
         "diversity": 0.054945054945054944
       },
       "metrics": {
-        "mean_final_score": 0.5449906741852862,
-        "std_final_score": 0.08192977359969765,
-        "mean_user_score": 0.5449906741852862,
+        "mean_final_score": 0.5431999184961356,
+        "std_final_score": 0.08405410584751444,
+        "mean_user_score": 0.5431999184961356,
         "user_count": 1,
         "total_recommendations": 10
       }
@@ -70,9 +70,9 @@
         "diversity": 0.04854368932038835
       },
       "metrics": {
-        "mean_final_score": 0.5263249855808201,
-        "std_final_score": 0.10178855518313033,
-        "mean_user_score": 0.5263249855808201,
+        "mean_final_score": 0.5299196347921675,
+        "std_final_score": 0.09827373530711965,
+        "mean_user_score": 0.5299196347921675,
         "user_count": 1,
         "total_recommendations": 10
       }
@@ -87,9 +87,9 @@
         "diversity": 0.05154639175257732
       },
       "metrics": {
-        "mean_final_score": 0.5236258059437855,
-        "std_final_score": 0.11304766344215646,
-        "mean_user_score": 0.5236258059437855,
+        "mean_final_score": 0.5160549831405343,
+        "std_final_score": 0.12056292949550758,
+        "mean_user_score": 0.5160549831405343,
         "user_count": 1,
         "total_recommendations": 10
       }

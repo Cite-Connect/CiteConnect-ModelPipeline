@@ -42,8 +42,7 @@ from typing import Dict, List, Tuple
 from datetime import datetime
 
 import numpy as np
-import sys
-sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from app.db.connection import DatabaseConnection
 from app.services.recommendation_service import RecommendationService
 from app.utils.logger import get_logger
