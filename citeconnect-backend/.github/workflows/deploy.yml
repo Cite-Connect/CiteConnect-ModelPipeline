@@ -1,57 +1,101 @@
----
-name: Deploy Dev
+name: Deploy CiteConnect to Cloud Run
 
-"on":
+on:
   push:
-    branches:
-      - 'feature/user-embedding-generation-v2'
-  workflow_dispatch:
+    branches: [ main ]
 
 env:
   PROJECT_ID: strange-calling-476017-r5
-  SERVICE_NAME: citeconnect-backend-api-dev
+  SERVICE_NAME: citeconnect-backend-api
   REGION: us-central1
+  IMAGE_NAME: gcr.io/strange-calling-476017-r5/citeconnect-backend-api
 
 jobs:
-  deploy-dev:
+  deploy:
     runs-on: ubuntu-latest
-
+    
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - name: Checkout code
+      uses: actions/checkout@v4
 
-      - name: Set up Cloud SDK
-        uses: google-github-actions/setup-gcloud@v2
-        with:
-          project_id: ${{ secrets.GCP_PROJECT_ID }}
-          service_account_key: ${{ secrets.GCP_SA_KEY }}
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v1
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
 
-      - name: Configure Docker
-        run: gcloud auth configure-docker gcr.io
+    - name: Configure Docker to use gcloud
+      run: gcloud auth configure-docker gcr.io
 
-      - name: Build and push
-        run: |
-          docker build --platform linux/amd64 \
-            -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
-          docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+    - name: Build Docker image
+      run: |
+        echo "🔨 Building Docker image..."
+        docker build --platform linux/amd64 \
+          -t $IMAGE_NAME:$GITHUB_SHA \
+          -t $IMAGE_NAME:latest .
 
-      - name: Deploy to dev environment
-        run: |
-          gcloud run deploy $SERVICE_NAME \
-            --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
-            --region $REGION \
-            --memory 4Gi \
-            --cpu 2 \
-            --timeout 600 \
-            --allow-unauthenticated \
-            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-            --set-env-vars SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            --set-env-vars SUPABASE_KEY="${{ secrets.SUPABASE_KEY }}" \
-            --set-env-vars ENVIRONMENT="development"
+    - name: Push Docker image
+      run: |
+        echo "📤 Pushing Docker image to Container Registry..."
+        docker push $IMAGE_NAME:$GITHUB_SHA
+        docker push $IMAGE_NAME:latest
+        echo "✅ Image pushed successfully"
 
-      - name: Get dev URL
-        run: |
-          SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
-            --region $REGION \
-            --format 'value(status.url)')
-          echo "🚀 Dev service deployed at: $SERVICE_URL"
+    - name: Deploy to Cloud Run
+      run: |
+        echo "🚀 Deploying to Cloud Run..."
+        gcloud run deploy $SERVICE_NAME \
+          --image $IMAGE_NAME:$GITHUB_SHA \
+          --region $REGION \
+          --platform managed \
+          --port 8000 \
+          --memory 4Gi \
+          --cpu 2 \
+          --timeout 300 \
+          --allow-unauthenticated \
+          --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+          --set-env-vars SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+          --set-env-vars SUPABASE_KEY="${{ secrets.SUPABASE_KEY }}" \
+          --set-env-vars ENVIRONMENT="production" \
+          --set-env-vars DEBUG="false" \
+          --set-env-vars LOG_LEVEL="INFO" \
+          --set-env-vars APP_NAME="CiteConnect" \
+          --set-env-vars SECRET_KEY="${{ secrets.SECRET_KEY }}" \
+          --set-env-vars DEFAULT_EMBEDDING_MODEL="all-MiniLM-L6-v2" \
+          --set-env-vars MODEL_CACHE_DIR="./models" \
+          --set-env-vars API_V1_PREFIX="/api/v1"
+
+    - name: Get service URL
+      id: get_url
+      run: |
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+          --region $REGION \
+          --format 'value(status.url)')
+        echo "service_url=$SERVICE_URL" >> $GITHUB_OUTPUT
+        echo "🌐 Service URL: $SERVICE_URL"
+
+    - name: Health check
+      run: |
+        echo "🏥 Running health check..."
+        sleep 30  # Wait for service to be ready
+        
+        SERVICE_URL="${{ steps.get_url.outputs.service_url }}"
+        
+        # Test health endpoint
+        if curl -f "$SERVICE_URL/health"; then
+          echo "✅ Health check passed!"
+          echo "🎉 Deployment successful!"
+        else
+          echo "❌ Health check failed!"
+          exit 1
+        fi
+
+    - name: Deployment summary
+      run: |
+        echo "📋 Deployment Summary:"
+        echo "- Image: $IMAGE_NAME:$GITHUB_SHA"
+        echo "- Service: $SERVICE_NAME"
+        echo "- Region: $REGION"
+        echo "- URL: ${{ steps.get_url.outputs.service_url }}"
+        echo "- Health: ${{ steps.get_url.outputs.service_url }}/health"
