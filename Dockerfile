@@ -15,12 +15,11 @@ COPY citeconnect-backend/requirements.txt .
 
 RUN pip install --upgrade pip
 
-RUN pip install --no-cache-dir \
-    torch>=1.9.0 \
-    huggingface_hub==0.16.4 \
-    transformers==4.21.3 \
-    tokenizers==0.12.1 \
-    sentence-transformers==2.2.2
+RUN pip install --no-cache-dir --only-binary=all torch==1.13.1+cpu --index-url https://download.pytorch.org/whl/cpu
+RUN pip install --no-cache-dir --only-binary=all huggingface_hub==0.16.4
+RUN pip install --no-cache-dir --only-binary=all transformers==4.21.3  
+RUN pip install --no-cache-dir --only-binary=all tokenizers==0.12.1
+RUN pip install --no-cache-dir --only-binary=all sentence-transformers==2.2.2
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
