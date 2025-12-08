@@ -53,6 +53,9 @@ jobs:
           --memory 4Gi \
           --cpu 2 \
           --timeout 900 \
+          --max-instances 10 \
+          --execution-environment gen2 \
+          --cpu-throttling \
           --allow-unauthenticated \
 
     - name: Get service URL
