@@ -61,12 +61,18 @@ def run_model_bias_analysis(
 
     meta_df = pd.read_parquet(metadata_path)
 
+    # Reset index to avoid any index-related issues
+    meta_df = meta_df.reset_index(drop=True)
+
     # Align ID column name
     if "paperId" in meta_df.columns:
         meta_df = meta_df.rename(columns={"paperId": "paper_id"})
 
     if "paper_id" not in meta_df.columns:
         raise ValueError("Metadata must contain 'paperId' or 'paper_id' column.")
+
+    # Ensure paper_id is unique (drop duplicates if any)
+    meta_df = meta_df.drop_duplicates(subset=["paper_id"], keep="first")
 
     # Create a primary_field column from fieldsOfStudy
     if "fieldsOfStudy" in meta_df.columns:
@@ -79,7 +85,12 @@ def run_model_bias_analysis(
         if col not in meta_df.columns:
             meta_df[col] = None
 
-    meta_df = meta_df[["paper_id", "primary_field", "year", "citationCount"]]
+    # Select only needed columns and ensure no duplicates
+    meta_df = meta_df[["paper_id", "primary_field", "year", "citationCount"]].copy()
+    
+    # Verify no duplicate column names
+    if meta_df.columns.duplicated().any():
+        raise ValueError(f"Duplicate columns found: {meta_df.columns[meta_df.columns.duplicated()].tolist()}")
 
     # ---------------------------------------------------
     # 3) Join eval results with metadata
