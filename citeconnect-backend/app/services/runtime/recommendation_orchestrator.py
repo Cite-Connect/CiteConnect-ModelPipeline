@@ -53,7 +53,17 @@ class RecommendationOrchestrator:
         Generate recommendations by coordinating services.
         Now supports search-augmented mode.
         """
+        # CRITICAL: Store original search_query BEFORE any modifications
         original_search_query = search_query
+        logger.info(
+            "Orchestrator.generate_recommendations called",
+            user_id=user_id,
+            search_query=search_query,
+            search_query_type=type(search_query).__name__,
+            search_query_len=len(search_query) if search_query else 0,
+            original_search_query=original_search_query,
+            original_search_query_type=type(original_search_query).__name__
+        )
         start_time = time.time()
         
         # Get user context
@@ -83,6 +93,7 @@ class RecommendationOrchestrator:
         )
 
         recommendations = []
+        search_result_metadata = {}  # Initialize to avoid scoping issues
         
         # ────────────────────────────────────────────────────────
         # ROUTE BASED ON SEARCH QUERY
@@ -94,7 +105,8 @@ class RecommendationOrchestrator:
             try:
                 logger.info(
                     "Using search-augmented strategy",
-                    search_query=search_query[:100]
+                    search_query=search_query[:100],
+                    original_search_query=original_search_query
                 )
                 
                 result = await self.rec_service.generate_search_augmented_recommendations(
@@ -104,12 +116,35 @@ class RecommendationOrchestrator:
                     model=model_name
                 )
                 recommendations = result.get('papers', [])
+                # Store LLM refinement info from result
+                search_result_metadata = {
+                    'refined_query': result.get('refined_query'),
+                    'llm_refinement_used': result.get('llm_refinement_used', False)
+                }
+                logger.info(
+                    "Search-augmented result received",
+                    papers_count=len(recommendations),
+                    refined_query=result.get('refined_query'),
+                    llm_refinement_used=result.get('llm_refinement_used', False),
+                    search_query_from_result=result.get('search_query')
+                )
+                # Ensure original_search_query is preserved
+                # The result should contain the original search_query, but if it doesn't, keep what we have
+                result_search_query = result.get('search_query')
+                if result_search_query and isinstance(result_search_query, str) and result_search_query.strip():
+                    # Use the search_query from result (should be the original query)
+                    original_search_query = result_search_query
+                # If result doesn't have search_query but we have the input, preserve it
+                elif not original_search_query or (isinstance(original_search_query, str) and not original_search_query.strip()):
+                    if search_query and isinstance(search_query, str) and search_query.strip():
+                        original_search_query = search_query
                 
             except Exception as e:
                 logger.error(f"Search-augmented strategy failed: {e}", exc_info=True)
                 # Fallback to regular recommendations
                 logger.warning("Falling back to profile-based recommendations")
                 search_query = None  # Clear search to trigger fallback
+                search_result_metadata = {}  # Reset metadata on fallback
         
         # ────────────────────────────────────────────────────────
         # FALLBACK: PROFILE-BASED MODE (Original Logic)
@@ -205,19 +240,51 @@ class RecommendationOrchestrator:
         # ────────────────────────────────────────────────────────
         # RESPONSE
         # ────────────────────────────────────────────────────────
+        logger.info(
+            "Building response metadata",
+            original_search_query=original_search_query,
+            original_search_query_type=type(original_search_query).__name__,
+            strategy_used=strategy_used
+        )
+        metadata = {
+            "user_stage": user_context.get('stage'),
+            "strategy_used": strategy_used,
+            "model_used": model_name,
+            "search_query": original_search_query,
+            "evaluation_score": eval_report.get('combined_score') or eval_report.get('precision_at_10', 0.0),
+            "evaluation_scores": eval_report if eval_report else {},
+            "cache_hit": False,
+            "generation_time_ms": round(generation_time, 2),
+        }
+        
+        logger.info(
+            "Metadata built",
+            search_query_in_metadata=metadata.get('search_query'),
+            strategy=metadata.get('strategy_used')
+        )
+        
+        # Add LLM refinement info if available (from search-augmented mode)
+        logger.info(
+            "Adding LLM metadata to response",
+            search_result_metadata_exists=bool(search_result_metadata),
+            search_result_metadata_keys=list(search_result_metadata.keys()) if search_result_metadata else [],
+            refined_query=search_result_metadata.get('refined_query') if search_result_metadata else None,
+            llm_refinement_used=search_result_metadata.get('llm_refinement_used', False) if search_result_metadata else False
+        )
+        if search_result_metadata:
+            metadata['refined_query'] = search_result_metadata.get('refined_query')
+            metadata['llm_refinement_used'] = search_result_metadata.get('llm_refinement_used', False)
+            logger.info(
+                "LLM metadata added to response",
+                refined_query_in_metadata=metadata.get('refined_query'),
+                llm_refinement_used_in_metadata=metadata.get('llm_refinement_used')
+            )
+        else:
+            logger.warning("No search_result_metadata - LLM info not added")
+        
         response = {
             "recommendations": recommendations,
-            "metadata": {
-                "user_stage": user_context.get('stage'),
-                "strategy_used": strategy_used,
-                "model_used": model_name,
-                "search_query": original_search_query,  # ← Make sure this variable is in scope
-                "evaluation_score": eval_report.get('combined_score') or eval_report.get('precision_at_10', 0.0),
-                "evaluation_scores": eval_report if eval_report else {},
-                "cache_hit": False,
-                "generation_time_ms": round(generation_time, 2),
-                "search_query": original_search_query,
-            }
+            "metadata": metadata
         }
         
         return response

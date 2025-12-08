@@ -37,7 +37,7 @@ flower==2.0.1
 # CRITICAL: Specific versions to avoid conflicts
 # The key is to let transformers be pulled by sentence-transformers
 # ============================================================================
-sentence-transformers==3.3.1
+sentence-transformers>=3.3.1
 # transformers will be auto-installed by sentence-transformers (>=4.34.0,<5.0.0)
 torch==2.9.1
 torchvision==0.24.1
@@ -61,6 +61,12 @@ safetensors==0.4.5
 mlflow==2.9.0
 google-cloud-storage==2.10.0
 google-cloud-artifact-registry==1.11.0
+
+# ============================================================================
+# LLM Services
+# ============================================================================
+openai>=1.0.0  # OpenAI API for query refinement (using gpt-4o-mini - cheapest model)
+# google-generativeai>=0.3.0  # Optional: Keep for future Gemini support
 
 # ============================================================================
 # Utilities
