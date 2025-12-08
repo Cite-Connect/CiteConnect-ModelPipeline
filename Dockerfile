@@ -19,16 +19,16 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the contents of citeconnect-backend directly to /app (not as subdirectory)
 COPY citeconnect-backend/ .
 
+# Set model cache environment variables
+ENV TRANSFORMERS_CACHE=/app/models
+ENV SENTENCE_TRANSFORMERS_HOME=/app/models
+ENV HF_HOME=/app/models
+
 # Copy download_models.py from root
 COPY download_models.py .
 
 # Create directories for models and logs
 RUN mkdir -p /app/models /app/logs
-
-# Set model cache environment variables
-ENV TRANSFORMERS_CACHE=/app/models
-ENV SENTENCE_TRANSFORMERS_HOME=/app/models
-ENV HF_HOME=/app/models
 
 # Run the download script
 RUN python3 download_models.py && rm download_models.py
