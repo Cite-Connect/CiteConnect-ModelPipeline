@@ -49,7 +49,7 @@ numpy==1.26.4
 scikit-learn==1.5.2
 
 # PEFT is required for SPECTER2 model
-peft>=0.3.0,<0.8.0
+peft>=0.4.0
 
 # Supporting ML libraries
 safetensors==0.4.5
