@@ -1,0 +1,57 @@
+---
+name: Deploy Dev
+
+"on":
+  push:
+    branches:
+      - 'feature/user-embedding-generation-v2'
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: strange-calling-476017-r5
+  SERVICE_NAME: citeconnect-backend-api-dev
+  REGION: us-central1
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker
+        run: gcloud auth configure-docker gcr.io
+
+      - name: Build and push
+        run: |
+          docker build --platform linux/amd64 \
+            -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA .
+          docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+
+      - name: Deploy to dev environment
+        run: |
+          gcloud run deploy $SERVICE_NAME \
+            --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
+            --region $REGION \
+            --memory 4Gi \
+            --cpu 2 \
+            --timeout 600 \
+            --allow-unauthenticated \
+            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+            --set-env-vars SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+            --set-env-vars SUPABASE_KEY="${{ secrets.SUPABASE_KEY }}" \
+            --set-env-vars ENVIRONMENT="development"
+
+      - name: Get dev URL
+        run: |
+          SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+            --region $REGION \
+            --format 'value(status.url)')
+          echo "🚀 Dev service deployed at: $SERVICE_URL"
