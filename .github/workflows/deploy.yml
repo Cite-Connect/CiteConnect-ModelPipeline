@@ -63,9 +63,9 @@ jobs:
             --set-env-vars DEFAULT_EMBEDDING_MODEL="all-MiniLM-L6-v2" \
             --set-env-vars MODEL_CACHE_DIR="./models" \
             --set-env-vars API_V1_PREFIX="/api/v1" \
-            --set-env-vars TRANSFORMERS_CACHE="/app/models" \
-            --set-env-vars SENTENCE_TRANSFORMERS_HOME="/app/models" \
-            --set-env-vars HF_HOME="/app/models"
+            --set-env-vars TRANSFORMERS_CACHE="/models" \
+            --set-env-vars SENTENCE_TRANSFORMERS_HOME="/models" \
+            --set-env-vars HF_HOME="/models"
 
       - name: Verify Deployment
         run: |
