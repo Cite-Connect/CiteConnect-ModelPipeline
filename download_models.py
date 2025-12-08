@@ -4,7 +4,7 @@ import sys
 from sentence_transformers import SentenceTransformer
 
 print('🚀 Downloading embedding models...')
-cache_dir = '/models'
+cache_dir = '/app/models'
 os.makedirs(cache_dir, exist_ok=True)
 
 # Model 1: MiniLM
