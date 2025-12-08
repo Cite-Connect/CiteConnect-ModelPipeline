@@ -26,6 +26,7 @@ wheels/
 # Virtual Environment
 venv/
 ENV/
+github-actions-key.json
 
 # Environment Variables
 .env
