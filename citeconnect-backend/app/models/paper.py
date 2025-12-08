@@ -46,7 +46,7 @@ class PaperResponse(PaperBase):
     
     class Config:
         from_attributes = True
-        extra = "allow"
+        extra = "ignore"
 
 
 class PaperWithEmbedding(PaperResponse):

@@ -1,0 +1,74 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:  # Allow manual trigger
+
+env:
+  PROJECT_ID: strange-calling-476017-r5
+  SERVICE_NAME: citeconnect-backend-api
+  REGION: us-central1
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Cloud SDK
+      uses: google-github-actions/setup-gcloud@v2
+      with:
+        project_id: ${{ secrets.GCP_PROJECT_ID }}
+        service_account_key: ${{ secrets.GCP_SA_KEY }}
+        export_default_credentials: true
+
+    - name: Configure Docker
+      run: gcloud auth configure-docker gcr.io
+
+    - name: Build Docker image
+      run: |
+        docker build --platform linux/amd64 \
+          -t gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
+          -t gcr.io/$PROJECT_ID/$SERVICE_NAME:latest \
+          .
+
+    - name: Push Docker image
+      run: |
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA
+        docker push gcr.io/$PROJECT_ID/$SERVICE_NAME:latest
+
+    - name: Deploy to Cloud Run
+      run: |
+        gcloud run deploy $SERVICE_NAME \
+          --image gcr.io/$PROJECT_ID/$SERVICE_NAME:$GITHUB_SHA \
+          --region $REGION \
+          --platform managed \
+          --port 8000 \
+          --memory 4Gi \
+          --cpu 2 \
+          --timeout 600 \
+          --allow-unauthenticated \
+          --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
+          --set-env-vars SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
+          --set-env-vars ENVIRONMENT="production" \
+          --set-env-vars DEBUG="false" \
+          --set-env-vars LOG_LEVEL="INFO"
+
+    - name: Verify deployment
+      run: |
+        SERVICE_URL=$(gcloud run services describe $SERVICE_NAME \
+          --region $REGION \
+          --format 'value(status.url)')
+        
+        echo "Testing: $SERVICE_URL/health"
+        
+        # Wait for service to be ready
+        sleep 30
+        
+        # Test health endpoint
+        curl -f "$SERVICE_URL/health" || exit 1
+        
+        echo "✅ Deployment successful!"

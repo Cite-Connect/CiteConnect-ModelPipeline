@@ -66,7 +66,7 @@ class UserEmbeddingService:
         
         # Check if regeneration needed
         should_regenerate = await self.user_repo._should_regenerate_embeddings(user_id)
-        
+        should_regenerate = False  # Disable periodic regeneration for now
         if minilm_emb is None or specter_emb is None or should_regenerate:
             logger.info(
                 "Generating/updating embeddings",

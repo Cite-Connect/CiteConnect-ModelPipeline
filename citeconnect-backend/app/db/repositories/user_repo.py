@@ -718,8 +718,9 @@ class UserRepository(BaseRepository):
             return True
         
         stored_count = minilm['interaction_count']
-        
+        print(f"Interaction count: {interaction_count}, Stored count: {stored_count}"); # Debug print
         if interaction_count >= stored_count + settings.UPDATE_EVERY_N_INTERACTIONS:
+            print(f"Regenerating minilm embedding for user {user_id}"); # Debug print
             logger.info(
                 "Embedding regeneration needed",
                 user_id=user_id,
