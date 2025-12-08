@@ -19,10 +19,9 @@ import numpy as np
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
-
-from app.services.embedding_service import embedding_service
-from app.services.recommendation_service import recommendation_service
-from app.services.evaluation_service import evaluation_service
+from app.services.bootstrap.embedding_service import EmbeddingService
+from app.services.recommendation_service import RecommendationService
+from app.services.evaluation_service import EvaluationService
 from app.db.postgres import execute_query
 
 
@@ -65,12 +64,12 @@ async def test_full_pipeline():
         try:
             # Step 1: Generate/Get user embedding
             print("  [1/4] Generating user profile embedding...")
-            user_embedding = await embedding_service.get_user_profile_embedding(user_id)
+            user_embedding = await EmbeddingService.get_user_profile_embedding(user_id)
             print(f"        ✓ Embedding shape: {user_embedding.shape}")
             
             # Step 2: Generate recommendations
             print("  [2/4] Generating recommendations...")
-            recommendations = await recommendation_service.generate_recommendations(
+            recommendations = await RecommendationService.generate_recommendations(
                 user_id=user_id,
                 top_k=10
             )
@@ -89,7 +88,7 @@ async def test_full_pipeline():
             # Step 3: Evaluate metrics
             print(f"\n  [3/4] Evaluating metrics...")
             rec_ids = [r['paper_id'] for r in recommendations]
-            metrics = await evaluation_service.evaluate_recommendations(
+            metrics = await EvaluationService.evaluate_recommendations(
                 user_id=user_id,
                 recommended_paper_ids=rec_ids,
                 k=10
@@ -105,7 +104,7 @@ async def test_full_pipeline():
             
             # Step 4: Bias detection
             print(f"\n  [4/4] Running bias detection...")
-            bias_report = await evaluation_service.detect_domain_bias(
+            bias_report = await EvaluationService.detect_domain_bias(
                 user_id=user_id,
                 recommended_papers=recommendations,
                 threshold=0.50

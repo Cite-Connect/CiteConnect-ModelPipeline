@@ -5,6 +5,7 @@ Identifies high-quality papers and pre-computes citation networks.
 import asyncio
 import sys
 from pathlib import Path
+from datetime import datetime
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -89,9 +90,10 @@ async def identify_ground_truth_papers():
             if reference_coverage >= settings.MIN_REFERENCE_COVERAGE:
                 # Calculate quality score
                 # Based on: citations, recency, coverage
+                # Note: reference_coverage will be auto-calculated by database
                 citation_score = min(candidate['citation_count'] / 1000, 1.0)
                 recency_score = max(0, (candidate['year'] - 2000) / 24) if candidate['year'] else 0.5
-                coverage_score = reference_coverage
+                coverage_score = reference_coverage  # Used for quality calc only
                 
                 quality_score = (
                     citation_score * 0.4 +
@@ -100,10 +102,12 @@ async def identify_ground_truth_papers():
                 )
                 
                 # Create ground truth paper
+                # Pass reference_coverage for quality calculation, but it won't be inserted
+                # Database will auto-calculate it from reference_count and references_in_corpus
                 await gt_repo.create_ground_truth_paper(
                     paper_id=paper_id,
                     num_references=len(references),
-                    reference_coverage=reference_coverage,
+                    reference_coverage=reference_coverage,  # Used internally, not inserted
                     quality_score=quality_score
                 )
                 
@@ -173,10 +177,10 @@ async def compute_ground_truth_relationships():
                 )
                 SELECT co_cited_paper
                 FROM co_cited_counts
-                WHERE co_citation_count >= 3
+                WHERE co_citation_count >= 2
                   AND co_cited_paper != $1
                 ORDER BY co_citation_count DESC
-                LIMIT 50
+                LIMIT 100
             """
             
             co_cited_results = await db.fetch(co_cited_query, paper_id)
@@ -202,9 +206,9 @@ async def compute_ground_truth_relationships():
                 )
                 SELECT couple_paper
                 FROM couple_counts
-                WHERE shared_refs >= 3
+                WHERE shared_refs >= 2
                 ORDER BY shared_refs DESC
-                LIMIT 50
+                LIMIT 100
             """
             
             bib_couple_results = await db.fetch(bib_couple_query, paper_id)
@@ -278,14 +282,13 @@ async def identify_canonical_papers():
                 insert_query = """
                     INSERT INTO domain_canonical_papers (
                         domain, recommendation_tier, paper_ids, 
-                        avg_quality_score, paper_count
+                        avg_quality_score, updated_at
                     )
                     VALUES ($1, $2, $3, $4, $5)
                     ON CONFLICT (domain, recommendation_tier)
                     DO UPDATE SET
                         paper_ids = EXCLUDED.paper_ids,
                         avg_quality_score = EXCLUDED.avg_quality_score,
-                        paper_count = EXCLUDED.paper_count,
                         updated_at = NOW()
                 """
                 
@@ -295,7 +298,7 @@ async def identify_canonical_papers():
                     'foundational',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    result['count']
+                    datetime.now()  # ✅ Pass datetime, not int
                 )
                 
                 logger.debug(
@@ -329,7 +332,7 @@ async def identify_canonical_papers():
                     'recent',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    result['count']
+                    datetime.now()
                 )
                 
                 logger.debug(
@@ -367,7 +370,7 @@ async def identify_canonical_papers():
                     'trending',
                     result['paper_ids'],
                     float(result['avg_score']) if result['avg_score'] else 0.0,
-                    result['count']
+                    datetime.now()
                 )
                 
                 logger.debug(

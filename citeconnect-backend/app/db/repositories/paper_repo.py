@@ -36,12 +36,9 @@ class PaperRepository(BaseRepository):
         logger.debug("Finding paper by paper_id", paper_id=paper_id)
         
         query = """
-            SELECT 
-                p.*,
-                pqs.composite_score as quality_score
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
-            WHERE p.paper_id = $1
+            SELECT *
+            FROM papers
+            WHERE paper_id = $1
         """
         
         try:
@@ -86,23 +83,18 @@ class PaperRepository(BaseRepository):
         )
         
         query = """
-            SELECT 
-                p.*,
-                pqs.composite_score as quality_score
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
-            WHERE p.domain = $1
+            SELECT *
+            FROM papers
+            WHERE domain = $1
         """
         
         params = [domain]
         
         if min_year:
-            query += " AND p.year >= $2"
+            query += " AND year >= $2"
             params.append(min_year)
-            query += f" ORDER BY p.citation_count DESC LIMIT ${len(params) + 1}"
-        else:
-            query += " ORDER BY p.citation_count DESC LIMIT $2"
         
+        query += f" ORDER BY citation_count DESC LIMIT ${len(params) + 1}"
         params.append(limit)
         
         try:
@@ -146,12 +138,9 @@ class PaperRepository(BaseRepository):
         )
         
         query = """
-            SELECT 
-                p.*,
-                pqs.composite_score as quality_score
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
-            WHERE p.paper_id = ANY($1::text[])
+            SELECT *
+            FROM papers
+            WHERE paper_id = ANY($1::text[])
         """
         
         try:
@@ -194,18 +183,16 @@ class PaperRepository(BaseRepository):
         
         query = """
             SELECT 
-                p.*,
-                pqs.composite_score as quality_score,
+                *,
                 ts_rank(
-                    to_tsvector('english', p.title || ' ' || COALESCE(p.abstract, '')),
+                    to_tsvector('english', title || ' ' || COALESCE(abstract, '')),
                     plainto_tsquery('english', $1)
                 ) as relevance
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
+            FROM papers
             WHERE 
-                to_tsvector('english', p.title || ' ' || COALESCE(p.abstract, '')) 
+                to_tsvector('english', title || ' ' || COALESCE(abstract, '')) 
                 @@ plainto_tsquery('english', $1)
-            ORDER BY relevance DESC, p.citation_count DESC
+            ORDER BY relevance DESC, citation_count DESC
             LIMIT $2
         """
         
@@ -225,7 +212,91 @@ class PaperRepository(BaseRepository):
                 exc_info=True
             )
             raise
-    
+    async def semantic_search(
+        self,
+        embedding: np.ndarray,
+        model: str = 'minilm',
+        domain: Optional[str] = None,
+        limit: int = 50,
+        min_similarity: float = 0.3
+    ) -> List[Dict]:
+        """
+        Semantic search using vector similarity.
+        
+        Args:
+            embedding: Query embedding vector
+            model: Model name ('minilm' or 'specter')
+            domain: Optional domain filter
+            limit: Maximum results
+            min_similarity: Minimum similarity threshold
+            
+        Returns:
+            List[Dict]: Papers ranked by semantic similarity
+        """
+        logger.debug(
+            "Performing semantic search",
+            model=model,
+            domain=domain,
+            limit=limit
+        )
+        
+        # Determine embedding table
+        embedding_table = f'paper_embeddings_{model}'
+        
+        # Convert embedding to PostgreSQL vector format
+        embedding_str = '[' + ','.join(map(str, embedding.tolist())) + ']'
+        
+        # Build query
+        query = f"""
+            SELECT 
+                p.paper_id,
+                p.title,
+                p.abstract,
+                p.authors,
+                p.year,
+                p.citation_count,
+                p.domain,
+                p.sub_domains,
+                p.venue,
+                p.reference_ids,
+                1 - (pe.embedding <=> $1::vector) as similarity
+            FROM papers p
+            JOIN {embedding_table} pe ON p.paper_id = pe.paper_id
+            WHERE 1 - (pe.embedding <=> $1::vector) >= $2
+        """
+        
+        params = [embedding_str, min_similarity]
+        
+        if domain:
+            query += f" AND p.domain = ${len(params) + 1}"
+            params.append(domain)
+        
+        query += f" ORDER BY pe.embedding <=> $1::vector LIMIT ${len(params) + 1}"
+        params.append(limit)
+        
+        try:
+            results = await self.db.fetch(query, *params)
+            papers = [dict(row) for row in results]
+            
+            logger.info(
+                "Semantic search complete",
+                model=model,
+                domain=domain,
+                results=len(papers),
+                avg_similarity=np.mean([p['similarity'] for p in papers]) if papers else 0
+            )
+            
+            return papers
+            
+        except Exception as e:
+            logger.error(
+                "Semantic search failed",
+                model=model,
+                error=str(e),
+                exc_info=True
+            )
+            raise
+
     async def get_paper_citations(
         self,
         paper_id: str
@@ -242,14 +313,14 @@ class PaperRepository(BaseRepository):
         logger.debug("Getting paper citations", paper_id=paper_id)
         
         query = """
-            SELECT citation_ids
+            SELECT paper_id
             FROM papers
-            WHERE paper_id = $1
+            WHERE $1 = ANY(reference_ids)
         """
         
         try:
-            result = await self.db.fetchval(query, paper_id)
-            citations = result or []
+            results = await self.db.fetch(query, paper_id)
+            citations = [row['paper_id'] for row in results]
             logger.debug(
                 "Citations retrieved",
                 paper_id=paper_id,
@@ -309,56 +380,69 @@ class PaperRepository(BaseRepository):
         domain: Optional[str] = None,
         days: int = 30,
         limit: int = 20
-    ) -> List[asyncpg.Record]:
+    ) -> List[Dict]:
         """
-        Get trending papers (recent with high citations).
+        Get trending papers based on recent years and high citations.
         
         Args:
             domain: Optional domain filter
-            days: Consider papers from last N days
+            days: Not used (kept for compatibility)
             limit: Maximum results
             
         Returns:
-            List[Record]: Trending papers
+            List[Dict]: Trending papers
         """
         logger.debug(
             "Getting trending papers",
             domain=domain,
-            days=days,
             limit=limit
         )
         
-        query = """
-            SELECT 
-                p.*,
-                pqs.composite_score as quality_score,
-                (p.citation_count::float / GREATEST(
-                    EXTRACT(DAY FROM NOW() - p.published_date), 1
-                )) as trend_score
-            FROM papers p
-            LEFT JOIN paper_quality_scores pqs ON p.paper_id = pqs.paper_id
-            WHERE p.published_date >= NOW() - INTERVAL '1 day' * $1
-        """
-        
-        params = [days]
-        
-        if domain:
-            query += " AND p.domain = $2"
-            params.append(domain)
-            query += f" ORDER BY trend_score DESC LIMIT ${len(params) + 1}"
-        else:
-            query += " ORDER BY trend_score DESC LIMIT $2"
-        
-        params.append(limit)
-        
         try:
+            query = """
+                SELECT 
+                    paper_id,
+                    title,
+                    abstract,
+                    authors,
+                    year,
+                    citation_count,
+                    domain,
+                    sub_domains,
+                    venue,
+                    reference_ids
+                FROM papers
+                WHERE year >= EXTRACT(YEAR FROM CURRENT_DATE) - 2
+                  AND citation_count >= 10
+            """
+            
+            params = []
+            
+            if domain:
+                query += " AND domain = $1"
+                params.append(domain)
+            
+            query += f" ORDER BY citation_count DESC, year DESC LIMIT ${len(params) + 1}"
+            params.append(limit)
+            
+            logger.info(
+                "Fetching trending papers",
+                domain=domain,
+                limit=limit
+            )
+            
             results = await self.db.fetch(query, *params)
+            
+            papers = [dict(row) for row in results]
+            
             logger.info(
                 "Trending papers retrieved",
                 domain=domain,
-                count=len(results)
+                count=len(papers)
             )
-            return results
+            
+            return papers
+            
         except Exception as e:
             logger.error(
                 "Trending papers retrieval failed",
@@ -375,38 +459,17 @@ class PaperRepository(BaseRepository):
     ) -> None:
         """
         Update paper quality score.
+        Note: This method is a placeholder - quality scores are not currently stored.
         
         Args:
             paper_id: Paper identifier
             quality_score: Composite quality score
         """
-        logger.debug(
-            "Updating quality score",
+        logger.warning(
+            "Quality score update requested but not implemented",
             paper_id=paper_id,
-            score=quality_score
+            score=quality_score,
+            reason="paper_quality_scores table does not exist"
         )
-        
-        query = """
-            INSERT INTO paper_quality_scores (paper_id, composite_score)
-            VALUES ($1, $2)
-            ON CONFLICT (paper_id) 
-            DO UPDATE SET 
-                composite_score = EXCLUDED.composite_score,
-                updated_at = NOW()
-        """
-        
-        try:
-            await self.db.execute(query, paper_id, quality_score)
-            logger.info(
-                "Quality score updated",
-                paper_id=paper_id,
-                score=quality_score
-            )
-        except Exception as e:
-            logger.error(
-                "Quality score update failed",
-                paper_id=paper_id,
-                error=str(e),
-                exc_info=True
-            )
-            raise
+        # No-op - table doesn't exist
+        pass

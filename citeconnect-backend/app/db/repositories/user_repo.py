@@ -8,6 +8,8 @@ import asyncpg
 from app.db.repositories.base import BaseRepository
 from app.db.connection import DatabaseConnection
 from app.utils.logger import get_logger
+import numpy as np
+from app.config import settings
 
 logger = get_logger(__name__)
 
@@ -33,7 +35,7 @@ class UserRepository(BaseRepository):
         Returns:
             Optional[Record]: User record or None
         """
-        logger.debug("Finding user by email", email=email)
+        logger.info("Finding user by email", email=email)
         
         query = """
             SELECT * FROM users
@@ -41,6 +43,7 @@ class UserRepository(BaseRepository):
         """
         
         try:
+            logger.debug("Executing email lookup query", email=email)
             result = await self.db.fetchrow(query, email)
             logger.debug(
                 "User email lookup complete",
@@ -561,3 +564,266 @@ class UserRepository(BaseRepository):
                 exc_info=True
             )
             raise
+
+    async def _get_positive_interactions(
+        self,
+        user_id: int,
+        limit: int = 50
+    ) -> List[Dict]:
+        """
+        Get user's positive interactions (saved, liked, long views).
+        
+        Args:
+            user_id: User identifier
+            limit: Maximum interactions to retrieve
+            
+        Returns:
+            List of interaction records
+        """
+        query = """
+            SELECT 
+                paper_id,
+                interaction_type,
+                interaction_strength,
+                duration_seconds,
+                created_at
+            FROM user_interactions
+            WHERE user_id = $1
+              AND interaction_strength > 0
+            ORDER BY interaction_strength DESC, created_at DESC
+            LIMIT $2
+        """
+        
+        interactions = await self.db.fetch(query, user_id, limit)
+        
+        return [dict(i) for i in interactions]    
+    
+
+    
+    
+    async def _get_existing_embedding(
+        self,
+        user_id: int,
+        model: str
+    ) -> Optional[np.ndarray]:
+        """
+        Get existing user embedding from database.
+        
+        Args:
+            user_id: User identifier
+            model: Model name ('minilm' or 'specter')
+            
+        Returns:
+            Embedding vector or None
+        """
+        table = f'user_embeddings_{model}'
+        
+        query = f"""
+            SELECT embedding
+            FROM {table}
+            WHERE user_id = $1
+        """
+        
+        result = await self.db.fetchrow(query, user_id)
+        
+        if result:
+            return np.array(result['embedding'])
+        
+        return None
+    
+    async def _store_embedding(
+        self,
+        user_id: int,
+        model: str,
+        embedding: np.ndarray,
+        generation_method: str,
+        based_on_papers: Optional[List[str]],
+        interaction_count: int
+    ):
+        """
+        Store or update user embedding in database.
+        
+        Args:
+            user_id: User identifier
+            model: Model name ('minilm' or 'specter')
+            embedding: Embedding vector
+            generation_method: How embedding was generated
+            based_on_papers: Papers used (if any)
+            interaction_count: Current interaction count
+        """
+        table = f'user_embeddings_{model}'
+        
+        # Convert numpy array to PostgreSQL vector string format
+        embedding_str = '[' + ','.join(map(str, embedding.tolist())) + ']'
+        
+        query = f"""
+            INSERT INTO {table} (
+                user_id,
+                embedding,
+                generation_method,
+                based_on_papers,
+                interaction_count,
+                created_at,
+                last_updated
+            )
+            VALUES ($1, $2::vector, $3, $4, $5, NOW(), NOW())
+            ON CONFLICT (user_id)
+            DO UPDATE SET
+                embedding = EXCLUDED.embedding,
+                generation_method = EXCLUDED.generation_method,
+                based_on_papers = EXCLUDED.based_on_papers,
+                interaction_count = EXCLUDED.interaction_count,
+                last_updated = NOW()
+        """
+        
+        await self.db.execute(
+            query,
+            user_id,
+            embedding_str,
+            generation_method,
+            based_on_papers,
+            interaction_count
+        )
+        
+        logger.debug(
+            "Embedding stored",
+            user_id=user_id,
+            model=model,
+            table=table
+        )
+    
+    async def _should_regenerate_embeddings(self, user_id: int) -> bool:
+        """
+        Check if embeddings should be regenerated.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            True if regeneration needed
+        """
+        state = await self.get_recommendation_state(user_id)
+        
+        if not state:
+            return False
+        
+        interaction_count = state['interaction_count']
+        
+        minilm = await self.db.fetchrow(
+            "SELECT interaction_count FROM user_embeddings_minilm WHERE user_id = $1",
+            user_id
+        )
+        
+        if not minilm:
+            return True
+        
+        stored_count = minilm['interaction_count']
+        
+        if interaction_count >= stored_count + settings.UPDATE_EVERY_N_INTERACTIONS:
+            logger.info(
+                "Embedding regeneration needed",
+                user_id=user_id,
+                current_interactions=interaction_count,
+                stored_interactions=stored_count
+            )
+            return True
+        
+        return False
+    
+    async def _update_embedding_timestamps(self, user_id: int):
+        """
+        Update embedding generation timestamps in recommendation state.
+        
+        Args:
+            user_id: User identifier
+        """
+        query = """
+            UPDATE user_recommendation_state
+            SET 
+                last_embedding_update_minilm = NOW(),
+                last_embedding_update_specter = NOW(),
+                updated_at = NOW()
+            WHERE user_id = $1
+        """
+        
+        await self.db.execute(query, user_id)
+    
+    async def _check_stage_transition(
+        self,
+        user_id: int,
+        interaction_count: int
+    ):
+        """
+        Check and update recommendation stage based on interaction count.
+        
+        Args:
+            user_id: User identifier
+            interaction_count: Current interaction count
+        """
+        if interaction_count >= settings.EXPERT_STAGE_THRESHOLD:
+            new_stage = 'expert'
+        elif interaction_count >= settings.MATURE_STAGE_THRESHOLD:
+            new_stage = 'mature'
+        elif interaction_count >= settings.EARLY_STAGE_THRESHOLD:
+            new_stage = 'early'
+        else:
+            new_stage = 'cold_start'
+        
+        current = await self.db.fetchrow(
+            "SELECT recommendation_stage FROM user_recommendation_state WHERE user_id = $1",
+            user_id
+        )
+        
+        if current and current['recommendation_stage'] != new_stage:
+            logger.info(
+                "Stage transition detected",
+                user_id=user_id,
+                old_stage=current['recommendation_stage'],
+                new_stage=new_stage,
+                interaction_count=interaction_count
+            )
+            
+            await self.db.execute(
+                """
+                UPDATE user_recommendation_state
+                SET recommendation_stage = $1, updated_at = NOW()
+                WHERE user_id = $2
+                """,
+                new_stage,
+                user_id
+            )
+
+    async def find_by_id(self, user_id: int) -> Optional[asyncpg.Record]:
+        """
+        Find user by user_id.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Optional[Record]: User record or None
+        """
+        logger.debug("Finding user by ID", user_id=user_id)
+        
+        query = """
+            SELECT user_id, email, name, is_active, created_at, updated_at
+            FROM users
+            WHERE user_id = $1
+        """
+        
+        try:
+            result = await self.db.fetchrow(query, user_id)
+            logger.debug(
+                "User ID lookup complete",
+                user_id=user_id,
+                found=result is not None
+            )
+            return result
+        except Exception as e:
+            logger.error(
+                "User ID lookup failed",
+                user_id=user_id,
+                error=str(e),
+                exc_info=True
+            )
+            raise        

@@ -1,405 +1,1284 @@
 """
-Model Evaluation Service
-
-Implements evaluation metrics as required by Model Development Guidelines:
-- Precision@K
-- Recall@K
-- Mean Reciprocal Rank (MRR)
-- NDCG@K
-
-Also includes bias detection via domain slicing.
+Evaluation service for CiteConnect recommendations.
+Measures recommendation quality using ground truth and profile alignment.
 """
-
+from typing import List, Dict, Optional, Tuple, Any
 import numpy as np
-from typing import List, Dict, Set
-import logging
-from collections import defaultdict
+from datetime import datetime
+from collections import Counter
+import re
 
-from app.db.postgres import execute_query
+from app.db.connection import DatabaseConnection
+from app.db.repositories.user_repo import UserRepository
+from app.db.repositories.ground_truth_repo import GroundTruthRepository
+from app.utils.logger import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
-class ModelEvaluationService:
+class EvaluationService:
     """
-    Service for evaluating recommendation quality
+    Service for evaluating recommendation quality.
     
-    Target Metrics (from scoping document):
-    - Precision@10: ≥ 0.60
-    - Recall@10: ≥ 0.75
-    - MRR: ≥ 0.70
+    Supports:
+    - Cold-start evaluation (profile alignment + ground truth)
+    - Warm-start evaluation (precision, recall, NDCG)
+    - Batch evaluation for hyperparameter tuning
+    - MLflow integration for experiment tracking
     """
     
-    async def evaluate_recommendations(
-        self,
-        user_id: int,
-        recommended_paper_ids: List[str],
-        k: int = 10
-    ) -> Dict:
+    # Evaluation thresholds
+    PROFILE_ALIGNMENT_THRESHOLD = 0.60
+    GROUND_TRUTH_QUALITY_THRESHOLD = 0.50
+    COMBINED_SCORE_THRESHOLD = 0.60
+    
+    # Synonym dictionary for keyword matching
+    SYNONYMS = {
+        'machine learning': ['ml', 'deep learning', 'neural networks', 'artificial intelligence', 'ai'],
+        'medical imaging': ['radiology', 'medical image', 'imaging', 'radiological', 'diagnostic imaging'],
+        'diagnostics': ['diagnosis', 'diagnostic', 'clinical diagnosis'],
+        'computer vision': ['cv', 'image recognition', 'visual recognition', 'image processing'],
+        'natural language processing': ['nlp', 'text processing', 'language models', 'text analysis'],
+        'quantum computing': ['quantum', 'qubit', 'quantum algorithms'],
+    }
+    
+    def __init__(self, db: DatabaseConnection):
         """
-        Evaluate recommendation quality for a user
+        Initialize evaluation service.
         
         Args:
-            user_id: User ID
-            recommended_paper_ids: List of recommended paper IDs (ordered by score)
-            k: Number of top recommendations to evaluate
+            db: Database connection
+        """
+        self.db = db
+        self.user_repo = UserRepository(db)
+        self.gt_repo = GroundTruthRepository(db)
         
+        logger.info("EvaluationService initialized")
+    
+    async def evaluate_cold_start_recommendations(
+        self,
+        user_id: int,
+        recommendations: List[Dict],
+        model: str = 'minilm',  # ADD THIS PARAMETER
+        store_result: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Evaluate recommendations for cold-start user.
+        
+        Args:
+            user_id: User identifier
+            recommendations: List of recommended papers
+            model: Embedding model used ('minilm' or 'specter')
+            store_result: Whether to store evaluation in database
+            
         Returns:
             Dict with evaluation metrics
         """
-        logger.info(f"Evaluating recommendations for user {user_id} @ K={k}")
+        logger.info(
+            "Evaluating cold-start recommendations",
+            user_id=user_id,
+            recommendation_count=len(recommendations),
+            model=model
+        )
+        # Get user data
+        profile = await self.user_repo.get_profile(user_id)
+        if not profile:
+            raise ValueError(f"No profile found for user {user_id}")
         
-        # Get ground truth (relevant papers)
-        relevant_paper_ids = await self._get_ground_truth(user_id)
+        interests = await self.user_repo.get_user_interests(user_id)
+        if not interests:
+            raise ValueError(f"No interests found for user {user_id}")
         
-        if not relevant_paper_ids:
-            logger.warning(f"No ground truth for user {user_id}, using domain heuristic")
-            relevant_paper_ids = await self._get_domain_based_ground_truth(user_id)
+        interest_terms = [i['interest_term'] for i in interests]
         
-        # Calculate metrics
-        metrics = {
-            'user_id': user_id,
-            'k': k,
-            'precision_at_k': self._precision_at_k(
-                recommended_paper_ids[:k],
-                relevant_paper_ids
-            ),
-            'recall_at_k': self._recall_at_k(
-                recommended_paper_ids[:k],
-                relevant_paper_ids
-            ),
-            'mrr': self._mean_reciprocal_rank(
-                recommended_paper_ids,
-                relevant_paper_ids
-            ),
-            'ndcg_at_k': self._ndcg_at_k(
-                recommended_paper_ids[:k],
-                relevant_paper_ids,
-                k
-            ),
-            'ground_truth_size': len(relevant_paper_ids),
-            'recommended_size': len(recommended_paper_ids[:k])
+        # Calculate profile alignment
+        profile_alignment = await self._calculate_profile_alignment(
+            recommendations=recommendations,
+            user_interests=interest_terms
+        )
+        
+        # Calculate ground truth quality
+        ground_truth_quality = await self._calculate_ground_truth_quality(
+            recommendations=recommendations,
+            user_domain=profile['primary_domain'],
+            user_interests=interest_terms
+        )
+        
+        # Calculate combined score
+        combined_score = (
+            0.6 * profile_alignment +
+            0.4 * ground_truth_quality
+        )
+        
+        # Determine pass/fail
+        passes_threshold = combined_score >= self.COMBINED_SCORE_THRESHOLD
+        
+        evaluation_result = {
+        'user_id': user_id,
+        'evaluation_type': 'cold_start',
+        'model_used': model,  # ADD THIS
+        'profile_alignment': round(profile_alignment, 4),
+        'ground_truth_quality': round(ground_truth_quality, 4),
+        'combined_score': round(combined_score, 4),
+        'passes_threshold': passes_threshold,
+        'recommendation_count': len(recommendations),
+        'evaluated_at': datetime.utcnow().isoformat(),
+        'thresholds': {
+            'profile_alignment': self.PROFILE_ALIGNMENT_THRESHOLD,
+            'ground_truth_quality': self.GROUND_TRUTH_QUALITY_THRESHOLD,
+            'combined_score': self.COMBINED_SCORE_THRESHOLD
+            }
         }
         
-        logger.info(f"✓ Metrics for user {user_id}:")
-        logger.info(f"    Precision@{k}: {metrics['precision_at_k']:.3f}")
-        logger.info(f"    Recall@{k}: {metrics['recall_at_k']:.3f}")
-        logger.info(f"    MRR: {metrics['mrr']:.3f}")
-        logger.info(f"    NDCG@{k}: {metrics['ndcg_at_k']:.3f}")
+        logger.info(
+            "Cold-start evaluation complete",
+            user_id=user_id,
+            profile_alignment=profile_alignment,
+            ground_truth_quality=ground_truth_quality,
+            combined_score=combined_score,
+            passes=passes_threshold
+        )
         
-        return metrics
+        # Store evaluation result
+        if store_result:
+            await self._store_cold_start_evaluation(evaluation_result)
+        
+        return evaluation_result
     
-    async def _get_ground_truth(self, user_id: int) -> Set[str]:
+    async def evaluate_warm_start_recommendations(
+        self,
+        user_id: int,
+        recommendations: List[Dict],
+        ground_truth_papers: Optional[List[str]] = None,
+        store_result: bool = True
+    ) -> Dict[str, Any]:
         """
-        Get ground truth relevant papers for user
+        Evaluate recommendations for warm-start user.
         
-        Options (in priority order):
-        1. User's saved papers
-        2. User's liked papers
-        3. Papers viewed for >30 seconds
+        Metrics:
+        - Precision@K: Fraction of recommendations that are relevant
+        - Recall@K: Fraction of relevant papers that were recommended
+        - NDCG@K: Ranking quality
+        - Click-through rate: Estimated engagement
         
+        Args:
+            user_id: User identifier
+            recommendations: List of recommended papers
+            ground_truth_papers: Known relevant papers (if available)
+            store_result: Whether to store evaluation
+            
         Returns:
-            Set of relevant paper IDs
+            Dict with evaluation metrics
         """
-        # Option 1: Saved papers
-        saved = await execute_query(
-            "SELECT paper_id FROM user_saved_papers WHERE user_id = $1",
-            user_id,
-            fetch_all=True
+        logger.info(
+            "Evaluating warm-start recommendations",
+            user_id=user_id,
+            recommendation_count=len(recommendations)
         )
         
-        if saved:
-            return set(row['paper_id'] for row in saved)
+        # If no ground truth provided, use saved papers as proxy
+        if ground_truth_papers is None:
+            saved_papers = await self.db.fetch(
+                "SELECT paper_id FROM user_saved_papers WHERE user_id = $1",
+                user_id
+            )
+            ground_truth_papers = [p['paper_id'] for p in saved_papers]
         
-        # Option 2: Liked papers
-        liked = await execute_query(
-            "SELECT paper_id FROM user_liked_papers WHERE user_id = $1",
-            user_id,
-            fetch_all=True
+        # Calculate metrics
+        k = len(recommendations)
+        recommended_ids = [p['paper_id'] for p in recommendations]
+        
+        # Precision@K
+        relevant_in_recs = len(set(recommended_ids) & set(ground_truth_papers))
+        precision_at_k = relevant_in_recs / k if k > 0 else 0.0
+        
+        # Recall@K
+        recall_at_k = relevant_in_recs / len(ground_truth_papers) if ground_truth_papers else 0.0
+        
+        # NDCG@K (simplified - assumes binary relevance)
+        ndcg_at_k = self._calculate_ndcg(recommended_ids, ground_truth_papers, k)
+        
+        # Estimated CTR (based on scores)
+        avg_score = np.mean([p.get('final_score', 0) for p in recommendations])
+        estimated_ctr = min(avg_score * 0.4, 1.0)  # Heuristic
+        
+        evaluation_result = {
+            'user_id': user_id,
+            'evaluation_type': 'warm_start',
+            'precision_at_10': round(precision_at_k, 4),
+            'recall_at_10': round(recall_at_k, 4),
+            'ndcg_at_10': round(ndcg_at_k, 4),
+            'estimated_ctr': round(estimated_ctr, 4),
+            'recommendation_count': len(recommendations),
+            'ground_truth_count': len(ground_truth_papers),
+            'relevant_retrieved': relevant_in_recs,
+            'recommended_paper_ids': recommended_ids,
+            'evaluated_at': datetime.utcnow().isoformat()
+        }
+        
+        logger.info(
+            "Warm-start evaluation complete",
+            user_id=user_id,
+            precision=precision_at_k,
+            recall=recall_at_k,
+            ndcg=ndcg_at_k
         )
         
-        if liked:
-            return set(row['paper_id'] for row in liked)
+        if store_result:
+            await self._store_warm_start_evaluation(evaluation_result)
         
-        # Option 3: Papers with significant engagement
-        engaged = await execute_query(
+        return evaluation_result
+    
+    async def evaluate_search_augmented_recommendations(
+        self,
+        user_id: int,
+        search_query: str,
+        recommendations: List[Dict],
+        model: str = 'minilm',
+        store_result: bool = True
+    ) -> Dict[str, Any]:
+        """
+        Evaluate search-augmented recommendations.
+        Combines query relevance with profile alignment.
+        
+        Args:
+            user_id: User identifier
+            search_query: Original search query
+            recommendations: List of recommended papers
+            model: Embedding model used
+            store_result: Whether to store evaluation
+            
+        Returns:
+            Dict with evaluation metrics
+        """
+        logger.info(
+            "Evaluating search-augmented recommendations",
+            user_id=user_id,
+            search_query=search_query[:50],
+            recommendation_count=len(recommendations),
+            model=model
+        )
+        
+        # Get user data
+        profile = await self.user_repo.get_profile(user_id)
+        if not profile:
+            raise ValueError(f"No profile found for user {user_id}")
+        
+        interests = await self.user_repo.get_user_interests(user_id)
+        interest_terms = [i['interest_term'] for i in interests]
+        
+        # ────────────────────────────────────────────────────────
+        # METRIC 1: Search Query Alignment (50% weight)
+        # ────────────────────────────────────────────────────────
+        search_alignment = await self._calculate_search_alignment(
+            recommendations=recommendations,
+            search_query=search_query
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # METRIC 2: Profile Alignment (30% weight)
+        # ────────────────────────────────────────────────────────
+        profile_alignment = await self._calculate_profile_alignment(
+            recommendations=recommendations,
+            user_interests=interest_terms
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # METRIC 3: Ground Truth Quality (20% weight - lower for search)
+        # ────────────────────────────────────────────────────────
+        ground_truth_quality = await self._calculate_ground_truth_quality(
+            recommendations=recommendations,
+            user_domain=profile['primary_domain'],
+            user_interests=interest_terms
+        )
+        
+        # ────────────────────────────────────────────────────────
+        # Combined Score (Search-weighted)
+        # ────────────────────────────────────────────────────────
+        combined_score = (
+            0.50 * search_alignment +      # Search intent is primary
+            0.40 * profile_alignment +     # Profile still matters
+            0.10 * ground_truth_quality    # Academic validation
+        )
+        
+        # Threshold (more lenient for search)
+        passes_threshold = combined_score >= 0.50  # Lower than 0.60 for profile-only
+        
+        evaluation_result = {
+            'user_id': user_id,
+            'evaluation_type': 'search_augmented',
+            'search_query': search_query,
+            'model_used': model,
+            'search_alignment': round(search_alignment, 4),
+            'profile_alignment': round(profile_alignment, 4),
+            'ground_truth_quality': round(ground_truth_quality, 4),
+            'combined_score': round(combined_score, 4),
+            'passes_threshold': passes_threshold,
+            'recommendation_count': len(recommendations),
+            'evaluated_at': datetime.utcnow().isoformat(),
+            'thresholds': {
+                'search_alignment': 0.60,
+                'combined_score': 0.50
+            }
+        }
+        
+        logger.info(
+            "Search-augmented evaluation complete",
+            user_id=user_id,
+            search_alignment=search_alignment,
+            profile_alignment=profile_alignment,
+            combined_score=combined_score,
+            passes=passes_threshold
+        )
+        
+        # Store if requested
+        if store_result:
+            await self._store_search_evaluation(evaluation_result)
+        
+        return evaluation_result
+
+
+    async def _calculate_search_alignment(
+        self,
+        recommendations: List[Dict],
+        search_query: str
+    ) -> float:
+        """
+        Calculate how well recommendations match the search query.
+        
+        Args:
+            recommendations: List of papers
+            search_query: Original search query
+            
+        Returns:
+            Search alignment score (0.0-1.0)
+        """
+        if not recommendations or not search_query:
+            return 0.0
+        
+        # Extract search terms
+        search_terms = set(search_query.lower().split())
+        
+        # Remove common stop words
+        stop_words = {'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for'}
+        search_terms = {term for term in search_terms if term not in stop_words and len(term) > 2}
+        
+        if not search_terms:
+            return 0.0
+        
+        paper_scores = []
+        
+        for paper in recommendations:
+            # Combine title and abstract
+            paper_text = (
+                paper.get('title', '') + ' ' +
+                paper.get('abstract', '')
+            ).lower()
+            
+            # Count matching terms
+            matches = sum(1 for term in search_terms if term in paper_text)
+            
+            # Calculate score
+            match_score = matches / len(search_terms)
+            
+            # Bonus for title matches
+            title_text = paper.get('title', '').lower()
+            title_matches = sum(1 for term in search_terms if term in title_text)
+            if title_matches > 0:
+                match_score *= 1.2  # 20% bonus for title matches
+            
+            # Cap at 1.0
+            match_score = min(match_score, 1.0)
+            
+            paper_scores.append(match_score)
+        
+        # Average across all papers
+        search_alignment = np.mean(paper_scores)
+        
+        logger.debug(
+            "Search alignment calculated",
+            score=search_alignment,
+            search_terms=list(search_terms),
+            paper_count=len(recommendations)
+        )
+        
+        return float(search_alignment)
+
+
+    async def _store_search_evaluation(
+        self,
+        evaluation: Dict[str, Any]
+    ) -> None:
+        """
+        Store search-augmented evaluation result.
+        
+        Args:
+            evaluation: Evaluation result dict
+        """
+        query = """
+            INSERT INTO cold_start_evaluations (
+                user_id,
+                embedding_model,
+                profile_alignment,
+                ground_truth_quality,
+                combined_score,
+                recommendation_count,
+                evaluation_timestamp,
+                evaluation_metadata
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, NOW(), $7)
+            RETURNING evaluation_id
+        """
+        
+        metadata = {
+            'evaluation_type': 'search_augmented',
+            'search_query': evaluation['search_query'],
+            'search_alignment': evaluation['search_alignment']
+        }
+        
+        try:
+            result = await self.db.fetchrow(
+                query,
+                evaluation['user_id'],
+                evaluation['model_used'],
+                evaluation['profile_alignment'],
+                evaluation['ground_truth_quality'],
+                evaluation['combined_score'],
+                evaluation['recommendation_count'],
+                metadata
+            )
+            
+            logger.debug(
+                "Search evaluation stored",
+                evaluation_id=result['evaluation_id'] if result else None,
+                user_id=evaluation['user_id']
+            )
+        except Exception as e:
+            logger.error(
+                "Failed to store search evaluation",
+                error=str(e),
+                exc_info=True
+            )
+    
+    async def batch_evaluate_cold_start(
+        self,
+        user_ids: Optional[List[int]] = None,
+        model: str = 'minilm',
+        scoring_weights: Optional[Dict[str, float]] = None
+    ) -> Dict[str, Any]:
+        """
+        Evaluate recommendations for multiple cold-start users.
+        Used for hyperparameter tuning and model comparison.
+        
+        Args:
+            user_ids: List of user IDs (if None, evaluates all cold-start users)
+            model: Model to use for recommendations
+            scoring_weights: Optional custom weights to test
+            
+        Returns:
+            Aggregated evaluation results
+        """
+        logger.info(
+            "Starting batch cold-start evaluation",
+            user_count=len(user_ids) if user_ids else "all",
+            model=model
+        )
+        
+        # If no user_ids provided, get all cold-start users
+        if user_ids is None:
+            query = """
+                SELECT user_id
+                FROM user_recommendation_state
+                WHERE recommendation_stage = 'cold_start'
+                  AND user_id IN (SELECT user_id FROM user_profiles_extended)
+                ORDER BY user_id
             """
-            SELECT DISTINCT paper_id 
-            FROM user_interactions 
-            WHERE user_id = $1 
-            AND interaction_type = 'read_time'
-            AND duration_seconds >= 30
-            """,
-            user_id,
-            fetch_all=True
+            results = await self.db.fetch(query)
+            user_ids = [r['user_id'] for r in results]
+        
+        if not user_ids:
+            logger.warning("No cold-start users found for evaluation")
+            return {
+                'total_users': 0,
+                'evaluations': []
+            }
+        
+        logger.info(f"Evaluating {len(user_ids)} cold-start users")
+        
+        # Import recommendation service (avoid circular import)
+        from app.services.recommendation_service import RecommendationService
+        rec_service = RecommendationService(self.db)
+        
+        # Evaluate each user
+        evaluations = []
+        profile_alignments = []
+        ground_truth_qualities = []
+        combined_scores = []
+        
+        for i, user_id in enumerate(user_ids, 1):
+            try:
+                logger.debug(
+                    f"Evaluating user {i}/{len(user_ids)}",
+                    user_id=user_id
+                )
+                
+                # Generate recommendations
+                rec_result = await rec_service.generate_cold_start_recommendations(
+                    user_id=user_id,
+                    count=10,
+                    model=model,
+                    scoring_weights=scoring_weights
+                )
+                
+                # Evaluate
+                eval_result = await self.evaluate_cold_start_recommendations(
+                    user_id=user_id,
+                    recommendations=rec_result['papers'],
+                    store_result=True
+                )
+                
+                evaluations.append(eval_result)
+                profile_alignments.append(eval_result['profile_alignment'])
+                ground_truth_qualities.append(eval_result['ground_truth_quality'])
+                combined_scores.append(eval_result['combined_score'])
+                
+            except Exception as e:
+                logger.error(
+                    "Evaluation failed for user",
+                    user_id=user_id,
+                    error=str(e),
+                    exc_info=True
+                )
+        
+        # Aggregate results
+        aggregated = {
+            'total_users': len(user_ids),
+            'successful_evaluations': len(evaluations),
+            'failed_evaluations': len(user_ids) - len(evaluations),
+            'model_used': model,
+            'scoring_weights': scoring_weights or rec_service.DEFAULT_COLD_START_WEIGHTS,
+            'aggregate_metrics': {
+                'avg_profile_alignment': round(np.mean(profile_alignments), 4) if profile_alignments else 0.0,
+                'avg_ground_truth_quality': round(np.mean(ground_truth_qualities), 4) if ground_truth_qualities else 0.0,
+                'avg_combined_score': round(np.mean(combined_scores), 4) if combined_scores else 0.0,
+                'std_profile_alignment': round(np.std(profile_alignments), 4) if profile_alignments else 0.0,
+                'std_ground_truth_quality': round(np.std(ground_truth_qualities), 4) if ground_truth_qualities else 0.0,
+                'std_combined_score': round(np.std(combined_scores), 4) if combined_scores else 0.0,
+                'min_combined_score': round(min(combined_scores), 4) if combined_scores else 0.0,
+                'max_combined_score': round(max(combined_scores), 4) if combined_scores else 0.0,
+                'pass_rate': round(sum(1 for s in combined_scores if s >= self.COMBINED_SCORE_THRESHOLD) / len(combined_scores), 4) if combined_scores else 0.0
+            },
+            'evaluations': evaluations,
+            'evaluated_at': datetime.utcnow().isoformat()
+        }
+        
+        logger.info(
+            "Batch evaluation complete",
+            total_users=len(user_ids),
+            successful=len(evaluations),
+            avg_combined_score=aggregated['aggregate_metrics']['avg_combined_score'],
+            pass_rate=aggregated['aggregate_metrics']['pass_rate']
         )
         
-        if engaged:
-            return set(row['paper_id'] for row in engaged)
-        
-        return set()
+        return aggregated
     
-    async def _get_domain_based_ground_truth(self, user_id: int) -> Set[str]:
+    async def _calculate_profile_alignment(
+        self,
+        recommendations: List[Dict],
+        user_interests: List[str]
+    ) -> float:
         """
-        Fallback: Use highly cited papers in user's domain as ground truth
+        Calculate how well recommendations match user's stated interests.
         
         Args:
-            user_id: User ID
-        
+            recommendations: List of recommended papers
+            user_interests: User's interest terms
+            
         Returns:
-            Set of paper IDs from user's domain with high citations
+            Profile alignment score (0.0-1.0)
         """
-        # Get user's domain
-        domain_row = await execute_query(
-            "SELECT domain FROM user_domains WHERE user_id = $1",
-            user_id,
-            fetch_one=True
+        logger.debug(
+            "Calculating profile alignment",
+            recommendation_count=len(recommendations),
+            interest_count=len(user_interests)
         )
         
-        if not domain_row:
-            return set()
-        
-        # Get top cited papers in domain
-        # Note: This requires papers table to be populated
-        # For demo, return empty set (will result in 0 metrics - expected)
-        return set()
-    
-    def _precision_at_k(
-        self,
-        recommended: List[str],
-        relevant: Set[str]
-    ) -> float:
-        """
-        Precision@K = (# relevant in top K) / K
-        
-        Measures: What proportion of recommendations are relevant?
-        
-        Args:
-            recommended: List of recommended paper IDs (top K)
-            relevant: Set of relevant paper IDs (ground truth)
-        
-        Returns:
-            Precision score (0-1)
-        """
-        if not recommended:
+        if not recommendations or not user_interests:
             return 0.0
         
-        hits = len(set(recommended).intersection(relevant))
-        precision = hits / len(recommended)
+        paper_scores = []
         
-        return precision
+        for paper in recommendations:
+            # Extract keywords from paper
+            paper_keywords = self._extract_paper_keywords(
+                title=paper.get('title', ''),
+                abstract=paper.get('abstract', '')
+            )
+            
+            # Calculate match score
+            match_score = self._calculate_keyword_match_score(
+                paper_keywords=paper_keywords,
+                user_interests=user_interests
+            )
+            
+            paper_scores.append(match_score)
+            
+            logger.debug(
+                "Paper alignment calculated",
+                paper_id=paper.get('paper_id'),
+                match_score=match_score,
+                keywords_found=len(paper_keywords)
+            )
+        
+        # Average across all papers
+        profile_alignment = np.mean(paper_scores)
+        
+        logger.info(
+            "Profile alignment calculated",
+            score=profile_alignment,
+            individual_scores=paper_scores
+        )
+        
+        return float(profile_alignment)
     
-    def _recall_at_k(
+    async def _calculate_ground_truth_quality(
         self,
-        recommended: List[str],
-        relevant: Set[str]
+        recommendations: List[Dict],
+        user_domain: str,
+        user_interests: List[str]
     ) -> float:
         """
-        Recall@K = (# relevant in top K) / (total # relevant)
-        
-        Measures: What proportion of relevant papers were found?
+        Calculate ground truth quality by checking citation network overlap.
         
         Args:
-            recommended: List of recommended paper IDs (top K)
-            relevant: Set of relevant paper IDs (ground truth)
-        
+            recommendations: List of recommended papers
+            user_domain: User's primary domain
+            user_interests: User's interest terms
+            
         Returns:
-            Recall score (0-1)
+            Ground truth quality score (0.0-1.0)
         """
-        if not relevant:
+        logger.debug(
+            "Calculating ground truth quality",
+            recommendation_count=len(recommendations),
+            domain=user_domain
+        )
+        
+        # Find relevant ground truth papers
+        relevant_gt_papers = await self._get_relevant_ground_truth_papers(
+            user_interests=user_interests,
+            domain=user_domain
+        )
+        
+        if not relevant_gt_papers:
+            logger.warning(
+                "No relevant ground truth papers found",
+                domain=user_domain,
+                interests=user_interests
+            )
             return 0.0
         
-        hits = len(set(recommended).intersection(relevant))
-        recall = hits / len(relevant)
+        logger.debug(
+            "Relevant GT papers found",
+            count=len(relevant_gt_papers)
+        )
         
-        return recall
+        # Check each recommendation against GT networks
+        total_weight = 0.0
+        matches_detail = []
+        
+        for paper in recommendations:
+            paper_id = paper['paper_id']
+            
+            # Check if paper appears in any GT network
+            match_weight = await self._check_citation_network_match(
+                paper_id=paper_id,
+                gt_paper_ids=relevant_gt_papers
+            )
+            
+            total_weight += match_weight
+            
+            matches_detail.append({
+                'paper_id': paper_id,
+                'title': paper.get('title', ''),
+                'match_weight': match_weight,
+                'in_ground_truth': match_weight > 0
+            })
+        
+        # Normalize by number of recommendations
+        ground_truth_quality = total_weight / len(recommendations)
+        
+        # Count how many papers matched
+        matched_count = sum(1 for m in matches_detail if m['in_ground_truth'])
+        
+        logger.info(
+            "Ground truth quality calculated",
+            score=ground_truth_quality,
+            matched_papers=matched_count,
+            total_recommendations=len(recommendations),
+            relevant_gt_papers=len(relevant_gt_papers)
+        )
+        
+        return float(ground_truth_quality)
     
-    def _mean_reciprocal_rank(
+    def _extract_paper_keywords(
         self,
-        recommended: List[str],
-        relevant: Set[str]
-    ) -> float:
+        title: str,
+        abstract: str,
+        top_k: int = 15
+    ) -> List[str]:
         """
-        MRR = 1 / (rank of first relevant item)
-        
-        Measures: How quickly do we show a relevant result?
+        Extract keywords from paper using simple TF-IDF approach.
         
         Args:
-            recommended: List of recommended paper IDs (ordered)
-            relevant: Set of relevant paper IDs (ground truth)
-        
+            title: Paper title
+            abstract: Paper abstract
+            top_k: Number of keywords to extract
+            
         Returns:
-            MRR score (0-1)
+            List of keyword terms
         """
-        for i, paper_id in enumerate(recommended):
-            if paper_id in relevant:
-                return 1.0 / (i + 1)
+        # Combine title (weighted 3x) and abstract
+        text = f"{title} {title} {title} {abstract}"
         
-        return 0.0
+        if not text.strip():
+            return []
+        
+        # Simple preprocessing
+        text = text.lower()
+        
+        # Remove common stop words
+        stop_words = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for',
+            'of', 'with', 'by', 'from', 'as', 'is', 'was', 'are', 'were', 'been',
+            'be', 'have', 'has', 'had', 'do', 'does', 'did', 'will', 'would',
+            'could', 'should', 'may', 'might', 'can', 'this', 'that', 'these',
+            'those', 'we', 'our', 'their', 'its', 'such', 'which', 'using'
+        }
+        
+        # Extract words (simple tokenization)
+        words = re.findall(r'\b[a-z]+\b', text)
+        
+        # Filter stop words and short words
+        words = [w for w in words if w not in stop_words and len(w) > 3]
+        
+        # Count frequencies
+        word_counts = Counter(words)
+        
+        # Get top K most frequent
+        top_words = [word for word, count in word_counts.most_common(top_k)]
+        
+        return top_words
     
-    def _ndcg_at_k(
+    def _calculate_keyword_match_score(
         self,
-        recommended: List[str],
-        relevant: Set[str],
+        paper_keywords: List[str],
+        user_interests: List[str]
+    ) -> float:
+        """
+        Calculate match score between paper keywords and user interests.
+        Handles synonyms and partial matches.
+        
+        Args:
+            paper_keywords: Keywords from paper
+            user_interests: User's interest terms
+            
+        Returns:
+            Match score (0.0-1.0)
+        """
+        if not paper_keywords or not user_interests:
+            return 0.0
+        
+        total_match_score = 0.0
+        
+        for interest in user_interests:
+            interest_lower = interest.lower()
+            max_match_for_interest = 0.0
+            
+            # Check exact match
+            if interest_lower in paper_keywords:
+                max_match_for_interest = 1.0
+            else:
+                # Check partial matches and synonyms
+                for keyword in paper_keywords:
+                    # Partial match (e.g., "learning" in "machine learning")
+                    if interest_lower in keyword or keyword in interest_lower:
+                        max_match_for_interest = max(max_match_for_interest, 0.7)
+                    
+                    # Check synonyms
+                    synonyms = self.SYNONYMS.get(interest_lower, [])
+                    for synonym in synonyms:
+                        if synonym in keyword or keyword in synonym:
+                            max_match_for_interest = max(max_match_for_interest, 0.8)
+            
+            total_match_score += max_match_for_interest
+        
+        # Normalize by number of interests
+        match_score = total_match_score / len(user_interests)
+        
+        return match_score
+    
+    async def _get_relevant_ground_truth_papers(
+        self,
+        user_interests: List[str],
+        domain: str,
+        limit: int = 10
+    ) -> List[str]:
+        """
+        Find ground truth papers relevant to user's interests.
+        
+        Args:
+            user_interests: User's interest terms
+            domain: User's domain
+            limit: Maximum GT papers to return
+            
+        Returns:
+            List of relevant GT paper IDs
+        """
+        # Build search conditions for interests
+        conditions = []
+        for interest in user_interests:
+            conditions.append(f"title ILIKE '%{interest}%'")
+            conditions.append(f"abstract ILIKE '%{interest}%'")
+        
+        where_clause = ' OR '.join(conditions)
+        
+        query = f"""
+            SELECT gtp.paper_id, p.title
+            FROM ground_truth_papers gtp
+            JOIN papers p ON gtp.paper_id = p.paper_id
+            WHERE gtp.domain = $1
+              AND ({where_clause})
+            ORDER BY gtp.quality_score DESC
+            LIMIT $2
+        """
+        
+        results = await self.db.fetch(query, domain, limit)
+        
+        gt_paper_ids = [r['paper_id'] for r in results]
+        
+        logger.debug(
+            "Relevant GT papers identified",
+            count=len(gt_paper_ids),
+            domain=domain
+        )
+        
+        return gt_paper_ids
+    
+    async def _check_citation_network_match(
+        self,
+        paper_id: str,
+        gt_paper_ids: List[str]
+    ) -> float:
+        """
+        Check if paper appears in citation networks of GT papers.
+        
+        Args:
+            paper_id: Paper to check
+            gt_paper_ids: Relevant ground truth paper IDs
+            
+        Returns:
+            Match weight (0.0-1.0+)
+        """
+        total_weight = 0.0
+        
+        for gt_id in gt_paper_ids:
+            # Get relationships
+            relationships = await self.gt_repo.get_ground_truth_relationships(gt_id)
+            
+            if not relationships:
+                continue
+            
+            # Check citation network (direct citation)
+            '''if relationships.get('citation_network') and paper_id in relationships['citation_network']:
+                total_weight += 1.0
+                logger.debug(
+                    "Citation network match found",
+                    paper_id=paper_id,
+                    gt_paper_id=gt_id,
+                    match_type='direct_citation'
+                )'''
+            
+            # Check bibliographic couples
+            if relationships.get('bibliographic_couples') and paper_id in relationships['bibliographic_couples']:
+                total_weight += 0.6
+                logger.debug(
+                    "Bibliographic couple match found",
+                    paper_id=paper_id,
+                    gt_paper_id=gt_id,
+                    match_type='bibliographic_couple'
+                )
+            
+            # Check co-cited papers (if available)
+            if relationships.get('co_cited_papers') and paper_id in relationships['co_cited_papers']:
+                total_weight += 0.8
+                logger.debug(
+                    "Co-citation match found",
+                    paper_id=paper_id,
+                    gt_paper_id=gt_id,
+                    match_type='co_cited'
+                )
+        
+        # Normalize by number of GT papers
+        if gt_paper_ids:
+            normalized_weight = total_weight / len(gt_paper_ids)
+        else:
+            normalized_weight = 0.0
+        
+        return min(normalized_weight, 1.0)
+    
+    def _calculate_ndcg(
+        self,
+        recommended_ids: List[str],
+        relevant_ids: List[str],
         k: int
     ) -> float:
         """
-        Normalized Discounted Cumulative Gain @ K
-        
-        Measures: Quality of ranking (position matters)
+        Calculate Normalized Discounted Cumulative Gain @K.
         
         Args:
-            recommended: List of recommended paper IDs
-            relevant: Set of relevant paper IDs
-            k: Number of top results to consider
-        
-        Returns:
-            NDCG score (0-1)
-        """
-        # Create relevance scores (1 if relevant, 0 if not)
-        relevance_scores = [
-            1 if pid in relevant else 0
-            for pid in recommended[:k]
-        ]
-        
-        # Discounted Cumulative Gain
-        dcg = sum(
-            rel / np.log2(i + 2)  # i+2 because i starts at 0
-            for i, rel in enumerate(relevance_scores)
-        )
-        
-        # Ideal DCG (all relevant items at top)
-        ideal_relevance = sorted(relevance_scores, reverse=True)
-        idcg = sum(
-            rel / np.log2(i + 2)
-            for i, rel in enumerate(ideal_relevance)
-        )
-        
-        return dcg / idcg if idcg > 0 else 0.0
-    
-    async def detect_domain_bias(
-        self,
-        user_id: int,
-        recommended_papers: List[Dict],
-        threshold: float = 0.50
-    ) -> Dict:
-        """
-        Detect bias in recommendations via domain slicing
-        
-        Per Model Development Guidelines:
-        "Perform slicing: Break down dataset by meaningful slices"
-        
-        Args:
-            user_id: User ID
-            recommended_papers: List of recommended papers with metadata
-            threshold: Alert if any domain represents > this proportion
-        
-        Returns:
-            Bias detection report
-        """
-        logger.info(f"Running bias detection for user {user_id}")
-        
-        # Count papers per domain
-        domain_counts = defaultdict(int)
-        total = len(recommended_papers)
-        
-        for paper in recommended_papers:
-            domain = paper.get('domain', 'unknown')
-            domain_counts[domain] += 1
-        
-        # Calculate percentages
-        domain_distribution = {
-            domain: count / total
-            for domain, count in domain_counts.items()
-        }
-        
-        # Check for bias (over-representation)
-        biased_domains = {
-            domain: pct
-            for domain, pct in domain_distribution.items()
-            if pct > threshold
-        }
-        
-        is_biased = len(biased_domains) > 0
-        
-        if is_biased:
-            logger.warning(f"⚠ BIAS DETECTED for user {user_id}")
-            for domain, pct in biased_domains.items():
-                logger.warning(f"    {domain}: {pct:.1%} (threshold: {threshold:.1%})")
-        else:
-            logger.info(f"✓ No significant bias detected")
-        
-        report = {
-            'user_id': user_id,
-            'is_biased': is_biased,
-            'threshold': threshold,
-            'domain_distribution': domain_distribution,
-            'biased_domains': biased_domains,
-            'total_papers': total,
-            'unique_domains': len(domain_counts)
-        }
-        
-        return report
-    
-    async def evaluate_all_test_users(self, k: int = 10) -> Dict:
-        """
-        Evaluate recommendations for all test users
-        
-        Returns aggregated metrics across test set
-        
-        Args:
-            k: Top K for evaluation
-        
-        Returns:
-            Aggregated evaluation metrics
-        """
-        # Get test users (from seed_users.py)
-        test_users = await execute_query(
-            "SELECT user_id, email FROM users WHERE email LIKE '%@example.com'",
-            fetch_all=True
-        )
-        
-        logger.info(f"Evaluating {len(test_users)} test users")
-        
-        all_metrics = []
-        
-        for user in test_users:
-            user_id = user['user_id']
-            email = user['email']
+            recommended_ids: Recommended paper IDs
+            relevant_ids: Ground truth relevant paper IDs
+            k: Cutoff position
             
-            try:
-                # This would call recommendation_service.generate_recommendations
-                # For now, we'll just log
-                logger.info(f"  Evaluating user: {email}")
-                
-                # Metrics calculation would happen here
-                # metrics = await self.evaluate_recommendations(user_id, recs, k)
-                # all_metrics.append(metrics)
-                
-            except Exception as e:
-                logger.error(f"  Failed for {email}: {str(e)}")
+        Returns:
+            NDCG@K score (0.0-1.0)
+        """
+        if not recommended_ids or not relevant_ids:
+            return 0.0
         
-        # Aggregate metrics
-        if all_metrics:
-            avg_metrics = {
-                'avg_precision_at_10': np.mean([m['precision_at_k'] for m in all_metrics]),
-                'avg_recall_at_10': np.mean([m['recall_at_k'] for m in all_metrics]),
-                'avg_mrr': np.mean([m['mrr'] for m in all_metrics]),
-                'avg_ndcg_at_10': np.mean([m['ndcg_at_k'] for m in all_metrics]),
-                'num_users': len(all_metrics)
+        # Create relevance array (1 if relevant, 0 otherwise)
+        relevance = [1 if pid in relevant_ids else 0 for pid in recommended_ids[:k]]
+        
+        # Calculate DCG
+        dcg = relevance[0]
+        for i in range(1, len(relevance)):
+            dcg += relevance[i] / np.log2(i + 1)
+        
+        # Calculate ideal DCG
+        ideal_relevance = sorted(relevance, reverse=True)
+        idcg = ideal_relevance[0]
+        for i in range(1, len(ideal_relevance)):
+            idcg += ideal_relevance[i] / np.log2(i + 1)
+        
+        # Calculate NDCG
+        if idcg == 0:
+            return 0.0
+        
+        ndcg = dcg / idcg
+        
+        return float(ndcg)
+    
+    async def _store_cold_start_evaluation(
+        self,
+        evaluation: Dict[str, Any]
+    ) -> None:
+        """
+        Store cold-start evaluation result in database.
+        
+        Args:
+            evaluation: Evaluation result dict
+        """
+        query = """
+            INSERT INTO cold_start_evaluations (
+                user_id,
+                embedding_model,
+                profile_alignment,
+                ground_truth_quality,
+                recommendation_count,
+                evaluation_timestamp
+            )
+            VALUES ($1, $2, $3, $4, $5, NOW())
+            RETURNING evaluation_id, combined_score
+        """
+        
+        # Determine model from context (you'll need to pass this)
+        # For now, default to 'minilm'
+        embedding_model = evaluation.get('model_used', 'all-MiniLM-L6-v2')
+        
+        result = await self.db.fetchrow(
+            query,
+            evaluation['user_id'],
+            embedding_model,
+            evaluation['profile_alignment'],
+            evaluation['ground_truth_quality'],
+            evaluation['recommendation_count']
+        )
+        
+        logger.debug(
+            "Cold-start evaluation stored",
+            evaluation_id=result['evaluation_id'] if result else None,
+            user_id=evaluation['user_id'],
+            combined_score=result['combined_score'] if result else None
+        )
+    
+    async def _store_warm_start_evaluation(
+        self,
+        evaluation: Dict[str, Any]
+    ) -> None:
+        """
+        Store warm-start evaluation result in database.
+        
+        Args:
+            evaluation: Evaluation result dict
+        """
+        query = """
+            INSERT INTO warm_start_evaluations (
+                user_id,
+                precision_at_10,
+                recall_at_10,
+                ndcg_at_10,
+                estimated_ctr,
+                recommended_paper_ids,
+                evaluation_metadata,
+                evaluated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            RETURNING evaluation_id
+        """
+        
+        metadata = {
+            'ground_truth_count': evaluation['ground_truth_count'],
+            'relevant_retrieved': evaluation['relevant_retrieved']
+        }
+        
+        result = await self.db.fetchrow(
+            query,
+            evaluation['user_id'],
+            evaluation['precision_at_10'],
+            evaluation['recall_at_10'],
+            evaluation['ndcg_at_10'],
+            evaluation['estimated_ctr'],
+            evaluation['recommended_paper_ids'],
+            metadata
+        )
+        
+        logger.debug(
+            "Warm-start evaluation stored",
+            evaluation_id=result['evaluation_id'] if result else None,
+            user_id=evaluation['user_id']
+        )
+    
+    async def compare_models(
+        self,
+        user_ids: List[int],
+        model_a: str = 'minilm',
+        model_b: str = 'specter'
+    ) -> Dict[str, Any]:
+        """
+        Compare two embedding models using A/B testing.
+        
+        Args:
+            user_ids: Users to evaluate
+            model_a: First model
+            model_b: Second model
+            
+        Returns:
+            Comparison results with statistical significance
+        """
+        logger.info(
+            "Comparing models",
+            model_a=model_a,
+            model_b=model_b,
+            user_count=len(user_ids)
+        )
+        
+        # Evaluate with model A
+        results_a = await self.batch_evaluate_cold_start(
+            user_ids=user_ids,
+            model=model_a
+        )
+        
+        # Evaluate with model B
+        results_b = await self.batch_evaluate_cold_start(
+            user_ids=user_ids,
+            model=model_b
+        )
+        
+        # Extract combined scores
+        scores_a = [e['combined_score'] for e in results_a['evaluations']]
+        scores_b = [e['combined_score'] for e in results_b['evaluations']]
+        
+        # Statistical comparison
+        mean_a = np.mean(scores_a)
+        mean_b = np.mean(scores_b)
+        std_a = np.std(scores_a)
+        std_b = np.std(scores_b)
+        
+        # Simple t-test (approximate)
+        diff = abs(mean_a - mean_b)
+        pooled_std = np.sqrt((std_a**2 + std_b**2) / 2)
+        
+        # Determine winner
+        if diff > 0.05 and pooled_std < 0.15:  # Significant difference
+            winner = model_a if mean_a > mean_b else model_b
+            confidence = 'high'
+        elif diff > 0.02:
+            winner = model_a if mean_a > mean_b else model_b
+            confidence = 'medium'
+        else:
+            winner = 'tie'
+            confidence = 'low'
+        
+        comparison = {
+            'model_a': model_a,
+            'model_b': model_b,
+            'user_count': len(user_ids),
+            'results_a': {
+                'mean_score': round(mean_a, 4),
+                'std_score': round(std_a, 4),
+                'min_score': round(min(scores_a), 4),
+                'max_score': round(max(scores_a), 4)
+            },
+            'results_b': {
+                'mean_score': round(mean_b, 4),
+                'std_score': round(std_b, 4),
+                'min_score': round(min(scores_b), 4),
+                'max_score': round(max(scores_b), 4)
+            },
+            'winner': winner,
+            'confidence': confidence,
+            'score_difference': round(diff, 4),
+            'compared_at': datetime.utcnow().isoformat()
+        }
+        
+        logger.info(
+            "Model comparison complete",
+            winner=winner,
+            model_a_score=mean_a,
+            model_b_score=mean_b,
+            difference=diff
+        )
+        
+        return comparison
+    
+    async def get_evaluation_summary(
+        self,
+        evaluation_type: str = 'cold_start',
+        limit: int = 100
+    ) -> Dict[str, Any]:
+        """
+        Get summary of recent evaluations.
+        
+        Args:
+            evaluation_type: 'cold_start' or 'warm_start'
+            limit: Number of recent evaluations
+            
+        Returns:
+            Summary statistics
+        """
+        logger.info(
+            "Getting evaluation summary",
+            type=evaluation_type,
+            limit=limit
+        )
+        
+        if evaluation_type == 'cold_start':
+            query = """
+                SELECT 
+                    profile_alignment,
+                    ground_truth_quality,
+                    combined_score,
+                    passes_threshold,
+                    evaluated_at
+                FROM cold_start_evaluations
+                ORDER BY evaluated_at DESC
+                LIMIT $1
+            """
+        else:
+            query = """
+                SELECT 
+                    precision_at_10,
+                    recall_at_10,
+                    ndcg_at_10,
+                    estimated_ctr,
+                    evaluated_at
+                FROM warm_start_evaluations
+                ORDER BY evaluated_at DESC
+                LIMIT $1
+            """
+        
+        results = await self.db.fetch(query, limit)
+        
+        if not results:
+            return {
+                'evaluation_type': evaluation_type,
+                'total_evaluations': 0,
+                'summary': {}
+            }
+        
+        if evaluation_type == 'cold_start':
+            summary = {
+                'total_evaluations': len(results),
+                'avg_profile_alignment': round(np.mean([r['profile_alignment'] for r in results]), 4),
+                'avg_ground_truth_quality': round(np.mean([r['ground_truth_quality'] for r in results]), 4),
+                'avg_combined_score': round(np.mean([r['combined_score'] for r in results]), 4),
+                'pass_rate': round(sum(1 for r in results if r['passes_threshold']) / len(results), 4),
+                'std_combined_score': round(np.std([r['combined_score'] for r in results]), 4),
+                'min_combined_score': round(min([r['combined_score'] for r in results]), 4),
+                'max_combined_score': round(max([r['combined_score'] for r in results]), 4)
             }
         else:
-            avg_metrics = {
-                'avg_precision_at_10': 0.0,
-                'avg_recall_at_10': 0.0,
-                'avg_mrr': 0.0,
-                'avg_ndcg_at_10': 0.0,
-                'num_users': 0,
-                'note': 'No ground truth available - seed user interactions first'
+            summary = {
+                'total_evaluations': len(results),
+                'avg_precision': round(np.mean([r['precision_at_10'] for r in results]), 4),
+                'avg_recall': round(np.mean([r['recall_at_10'] for r in results]), 4),
+                'avg_ndcg': round(np.mean([r['ndcg_at_10'] for r in results]), 4),
+                'avg_ctr': round(np.mean([r['estimated_ctr'] for r in results]), 4)
             }
         
-        return avg_metrics
-
-
-# Create singleton instance
-evaluation_service = ModelEvaluationService()
+        logger.info(
+            "Evaluation summary retrieved",
+            type=evaluation_type,
+            total=len(results)
+        )
+        
+        return {
+            'evaluation_type': evaluation_type,
+            'total_evaluations': len(results),
+            'summary': summary,
+            'recent_evaluations': [dict(r) for r in results[:10]]
+        }
+    
+    async def get_user_evaluation_history(
+        self,
+        user_id: int
+    ) -> Dict[str, Any]:
+        """
+        Get evaluation history for a specific user.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            User's evaluation history
+        """
+        logger.info(
+            "Getting user evaluation history",
+            user_id=user_id
+        )
+        
+        # Get cold-start evaluations
+        cold_start_query = """
+            SELECT *
+            FROM cold_start_evaluations
+            WHERE user_id = $1
+            ORDER BY evaluated_at DESC
+        """
+        cold_start = await self.db.fetch(cold_start_query, user_id)
+        
+        # Get warm-start evaluations
+        warm_start_query = """
+            SELECT *
+            FROM warm_start_evaluations
+            WHERE user_id = $1
+            ORDER BY evaluated_at DESC
+        """
+        warm_start = await self.db.fetch(warm_start_query, user_id)
+        
+        return {
+            'user_id': user_id,
+            'cold_start_evaluations': [dict(e) for e in cold_start],
+            'warm_start_evaluations': [dict(e) for e in warm_start],
+            'total_evaluations': len(cold_start) + len(warm_start)
+        }

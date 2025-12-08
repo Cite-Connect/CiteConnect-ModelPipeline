@@ -1,154 +1,161 @@
 """
-Embedding service for generating and managing text embeddings.
-Loads models at startup and provides batch processing capabilities.
+Embedding service for text-to-vector conversion.
+Loads ML models at startup and provides simple encoding interface.
 """
-from typing import List, Optional, Dict
+from typing import Dict, Optional
 import numpy as np
 from sentence_transformers import SentenceTransformer
 import torch
+
 from app.config import settings
 from app.utils.logger import get_logger
-from app.db.repositories.embedding_repo import EmbeddingRepository
 
 logger = get_logger(__name__)
 
 
 class EmbeddingService:
     """
-    Manages multiple embedding models with caching and batch processing.
-    Models are loaded once at startup for efficiency.
+    Singleton service for managing embedding models.
+    Loads models once at startup and reuses them for all requests.
     """
     
-    def __init__(self, embedding_repo: EmbeddingRepository):
-        """
-        Initialize embedding service.
-        
-        Args:
-            embedding_repo: Repository for embedding storage
-        """
-        self.embedding_repo = embedding_repo
-        self.models: Dict[str, SentenceTransformer] = {}
-        self.model_dimensions: Dict[str, int] = {}
-        self.device = "cuda" if torch.cuda.is_available() else "cpu"
-        
-        logger.info(
-            "EmbeddingService initialized",
-            device=self.device
-        )
+    _instance = None
+    _initialized = False
     
-    async def initialize(self) -> None:
+    def __new__(cls):
+        """Singleton pattern - only one instance exists."""
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+    
+    def __init__(self):
+        """Initialize embedding service (only once)."""
+        if not self._initialized:
+            self.models: Dict[str, SentenceTransformer] = {}
+            self.device = "cuda" if torch.cuda.is_available() else "cpu"
+            
+            logger.info(
+                "EmbeddingService created",
+                device=self.device
+            )
+            
+            # Load models immediately
+            self._load_models()
+            
+            EmbeddingService._initialized = True
+    
+    def _load_models(self):
         """
-        Load embedding models into memory.
-        Called during application startup.
+        Load both embedding models into memory.
+        This is called once when the service is first created.
         """
         logger.info("Loading embedding models")
         
         try:
-            # Load MiniLM model (384 dimensions)
+            # Load MiniLM (384 dimensions)
             logger.info(
                 "Loading MiniLM model",
-                model=settings.EMBEDDING_MODEL_MINILM
+                model_name=settings.EMBEDDING_MODEL_MINILM
             )
             
-            minilm = SentenceTransformer(
+            self.models['minilm'] = SentenceTransformer(
                 settings.EMBEDDING_MODEL_MINILM,
-                cache_folder=settings.MODEL_CACHE_DIR,
                 device=self.device
             )
-            self.models['all-MiniLM-L6-v2'] = minilm
-            self.model_dimensions['all-MiniLM-L6-v2'] = 384
             
-            logger.info("MiniLM model loaded successfully")
-            
-            # Load SPECTER model (768 dimensions)
             logger.info(
-                "Loading SPECTER2 model",
-                model=settings.EMBEDDING_MODEL_SPECTER
+                "MiniLM model loaded",
+                dimensions=384
             )
             
-            specter = SentenceTransformer(
+            # Load SPECTER (768 dimensions)
+            logger.info(
+                "Loading SPECTER model",
+                model_name=settings.EMBEDDING_MODEL_SPECTER
+            )
+            
+            self.models['specter'] = SentenceTransformer(
                 settings.EMBEDDING_MODEL_SPECTER,
-                cache_folder=settings.MODEL_CACHE_DIR,
                 device=self.device
             )
-            self.models['specter2'] = specter
-            self.model_dimensions['specter2'] = 768
-            
-            logger.info("SPECTER2 model loaded successfully")
             
             logger.info(
-                "All embedding models loaded",
+                "SPECTER model loaded",
+                dimensions=768
+            )
+            
+            logger.info(
+                "All embedding models loaded successfully",
                 models=list(self.models.keys()),
                 device=self.device
             )
             
         except Exception as e:
             logger.error(
-                "Model loading failed",
+                "Failed to load embedding models",
                 error=str(e),
                 exc_info=True
             )
-            raise
+            raise RuntimeError(f"Could not load embedding models: {e}")
     
-    def _get_model(self, model_name: str) -> SentenceTransformer:
-        """
-        Get loaded model by name.
-        
-        Args:
-            model_name: Model identifier
-            
-        Returns:
-            SentenceTransformer: Loaded model
-            
-        Raises:
-            ValueError: If model not loaded
-        """
-        if model_name not in self.models:
-            logger.error(
-                "Model not found",
-                model=model_name,
-                available=list(self.models.keys())
-            )
-            raise ValueError(f"Model {model_name} not loaded")
-        
-        return self.models[model_name]
-    
-    async def embed_text(
+    def encode_text(
         self,
         text: str,
-        model_name: str,
+        model: str = 'minilm',
         normalize: bool = True
     ) -> np.ndarray:
         """
-        Generate embedding for single text.
+        Convert text to embedding vector.
         
         Args:
-            text: Text to embed
-            model_name: Model to use
-            normalize: Whether to normalize vector
+            text: Text to encode (e.g., "machine learning medical imaging")
+            model: Model to use ('minilm' or 'specter')
+            normalize: Whether to normalize the embedding vector
             
         Returns:
-            ndarray: Embedding vector
+            numpy array of embedding (384-dim for minilm, 768-dim for specter)
+            
+        Example:
+            >>> service = EmbeddingService()
+            >>> embedding = service.encode_text("machine learning", model='minilm')
+            >>> embedding.shape
+            (384,)
+            >>> embedding[:3]
+            array([0.234, -0.567, 0.891])
         """
-        logger.debug(
-            "Generating text embedding",
-            text_length=len(text),
-            model=model_name
-        )
+        if not text or not text.strip():
+            logger.warning("Empty text provided for encoding")
+            # Return zero vector
+            dim = 384 if model == 'minilm' else 768
+            return np.zeros(dim)
+        
+        if model not in self.models:
+            logger.error(
+                "Model not found",
+                model=model,
+                available_models=list(self.models.keys())
+            )
+            raise ValueError(
+                f"Model '{model}' not available. "
+                f"Available: {list(self.models.keys())}"
+            )
         
         try:
-            model = self._get_model(model_name)
+            # Get the model
+            encoder = self.models[model]
             
-            # Truncate if necessary
-            if len(text) > settings.EMBEDDING_MAX_LENGTH:
-                text = text[:settings.EMBEDDING_MAX_LENGTH]
+            # Truncate if too long (models have max length ~512 tokens)
+            max_length = 512
+            if len(text.split()) > max_length:
+                text = ' '.join(text.split()[:max_length])
                 logger.debug(
                     "Text truncated",
-                    max_length=settings.EMBEDDING_MAX_LENGTH
+                    original_words=len(text.split()),
+                    truncated_to=max_length
                 )
             
-            # Generate embedding
-            embedding = model.encode(
+            # Encode text to vector
+            embedding = encoder.encode(
                 text,
                 convert_to_numpy=True,
                 normalize_embeddings=normalize,
@@ -156,300 +163,156 @@ class EmbeddingService:
             )
             
             logger.debug(
-                "Embedding generated",
-                dimension=len(embedding),
-                model=model_name
+                "Text encoded successfully",
+                text_preview=text[:50],
+                model=model,
+                embedding_shape=embedding.shape
             )
             
             return embedding
             
         except Exception as e:
             logger.error(
-                "Embedding generation failed",
-                model=model_name,
+                "Text encoding failed",
+                text_preview=text[:100],
+                model=model,
                 error=str(e),
                 exc_info=True
             )
             raise
     
-    async def embed_batch(
+    def encode_batch(
         self,
-        texts: List[str],
-        model_name: str,
-        batch_size: Optional[int] = None,
+        texts: list[str],
+        model: str = 'minilm',
+        batch_size: int = 32,
         normalize: bool = True
-    ) -> List[np.ndarray]:
+    ) -> np.ndarray:
         """
-        Generate embeddings for multiple texts efficiently.
+        Encode multiple texts efficiently in batches.
         
         Args:
-            texts: List of texts to embed
-            model_name: Model to use
-            batch_size: Batch size for processing
-            normalize: Whether to normalize vectors
+            texts: List of texts to encode
+            model: Model to use ('minilm' or 'specter')
+            batch_size: Number of texts to process at once
+            normalize: Whether to normalize embeddings
             
         Returns:
-            List[ndarray]: Embedding vectors
+            numpy array of shape (num_texts, embedding_dim)
+            
+        Example:
+            >>> texts = ["text 1", "text 2", "text 3"]
+            >>> embeddings = service.encode_batch(texts, model='minilm')
+            >>> embeddings.shape
+            (3, 384)
         """
         if not texts:
-            logger.debug("No texts provided for batch embedding")
-            return []
+            logger.warning("Empty text list provided for batch encoding")
+            return np.array([])
         
-        logger.info(
-            "Generating batch embeddings",
-            count=len(texts),
-            model=model_name
-        )
+        if model not in self.models:
+            raise ValueError(
+                f"Model '{model}' not available. "
+                f"Available: {list(self.models.keys())}"
+            )
         
         try:
-            model = self._get_model(model_name)
+            encoder = self.models[model]
             
-            # Truncate texts if necessary
-            processed_texts = [
-                t[:settings.EMBEDDING_MAX_LENGTH] for t in texts
-            ]
+            logger.info(
+                "Encoding text batch",
+                num_texts=len(texts),
+                model=model,
+                batch_size=batch_size
+            )
             
-            # Use configured batch size if not provided
-            if batch_size is None:
-                batch_size = settings.EMBEDDING_BATCH_SIZE
-            
-            # Generate embeddings in batches
-            embeddings = model.encode(
-                processed_texts,
+            # Encode all texts
+            embeddings = encoder.encode(
+                texts,
                 batch_size=batch_size,
                 convert_to_numpy=True,
                 normalize_embeddings=normalize,
-                show_progress_bar=len(texts) > 100
+                show_progress_bar=len(texts) > 100  # Show progress for large batches
             )
             
             logger.info(
-                "Batch embeddings generated",
-                count=len(embeddings),
-                model=model_name
+                "Batch encoding complete",
+                num_texts=len(texts),
+                model=model,
+                embeddings_shape=embeddings.shape
             )
             
             return embeddings
             
         except Exception as e:
             logger.error(
-                "Batch embedding generation failed",
-                count=len(texts),
-                model=model_name,
+                "Batch encoding failed",
+                num_texts=len(texts),
+                model=model,
                 error=str(e),
                 exc_info=True
             )
             raise
     
-    async def embed_paper(
-        self,
-        paper_id: str,
-        title: str,
-        abstract: Optional[str],
-        model_name: str,
-        save_to_db: bool = True
-    ) -> np.ndarray:
+    def get_model_info(self, model: str) -> dict:
         """
-        Generate and optionally save paper embedding.
+        Get information about a loaded model.
         
         Args:
-            paper_id: Paper identifier
-            title: Paper title
-            abstract: Paper abstract
-            model_name: Model to use
-            save_to_db: Whether to save to database
+            model: Model name ('minilm' or 'specter')
             
         Returns:
-            ndarray: Paper embedding
+            Dict with model information
         """
-        logger.debug(
-            "Generating paper embedding",
-            paper_id=paper_id,
-            model=model_name,
-            has_abstract=abstract is not None
-        )
+        if model not in self.models:
+            return {'loaded': False}
         
-        # Combine title and abstract with weighting
-        if abstract:
-            # Title is repeated 3x for emphasis
-            text = f"{title} {title} {title} {abstract}"
-        else:
-            text = f"{title} {title} {title}"
+        encoder = self.models[model]
         
-        try:
-            embedding = await self.embed_text(text, model_name)
-            
-            if save_to_db:
-                await self.embedding_repo.save_paper_embedding(
-                    paper_id=paper_id,
-                    embedding=embedding,
-                    model_name=model_name,
-                    embedding_source="title_abstract"
-                )
-                logger.debug(
-                    "Paper embedding saved to database",
-                    paper_id=paper_id
-                )
-            
-            logger.info(
-                "Paper embedding generated",
-                paper_id=paper_id,
-                model=model_name
-            )
-            
-            return embedding
-            
-        except Exception as e:
-            logger.error(
-                "Paper embedding generation failed",
-                paper_id=paper_id,
-                model=model_name,
-                error=str(e),
-                exc_info=True
-            )
-            raise
+        return {
+            'loaded': True,
+            'name': model,
+            'model_path': settings.EMBEDDING_MODEL_MINILM if model == 'minilm' else settings.EMBEDDING_MODEL_SPECTER,
+            'dimensions': 384 if model == 'minilm' else 768,
+            'max_seq_length': encoder.max_seq_length,
+            'device': str(self.device)
+        }
     
-    async def embed_user_profile(
-        self,
-        user_id: int,
-        research_stage: str,
-        primary_domain: str,
-        interests: List[str],
-        research_goals: Optional[List[str]],
-        model_name: str,
-        save_to_db: bool = True
-    ) -> np.ndarray:
+    def health_check(self) -> dict:
         """
-        Generate user profile embedding from attributes.
-        
-        Args:
-            user_id: User identifier
-            research_stage: User's research stage
-            primary_domain: Primary research domain
-            interests: List of interests
-            research_goals: Research goals
-            model_name: Model to use
-            save_to_db: Whether to save to database
-            
-        Returns:
-            ndarray: User profile embedding
-        """
-        logger.debug(
-            "Generating user profile embedding",
-            user_id=user_id,
-            model=model_name,
-            interests_count=len(interests)
-        )
-        
-        # Build weighted text representation
-        text_components = []
-        
-        # Research stage (weight: 2)
-        text_components.extend([f"{research_stage} researcher"] * 2)
-        
-        # Primary domain (weight: 3)
-        text_components.extend([primary_domain] * 3)
-        
-        # Interests (weight: 5 each - highest importance)
-        for interest in interests:
-            text_components.extend([interest] * 5)
-        
-        # Research goals (weight: 3)
-        if research_goals:
-            for goal in research_goals:
-                text_components.extend([goal] * 3)
-        
-        # Combine into single text
-        profile_text = " ".join(text_components)
-        
-        try:
-            embedding = await self.embed_text(profile_text, model_name)
-            
-            if save_to_db:
-                await self.embedding_repo.save_user_embedding(
-                    user_id=user_id,
-                    embedding=embedding,
-                    model_name=model_name,
-                    embedding_source="profile_based"
-                )
-                logger.debug(
-                    "User embedding saved to database",
-                    user_id=user_id
-                )
-            
-            logger.info(
-                "User profile embedding generated",
-                user_id=user_id,
-                model=model_name
-            )
-            
-            return embedding
-            
-        except Exception as e:
-            logger.error(
-                "User profile embedding generation failed",
-                user_id=user_id,
-                model=model_name,
-                error=str(e),
-                exc_info=True
-            )
-            raise
-    
-    def get_dimension(self, model_name: str) -> int:
-        """
-        Get embedding dimension for model.
-        
-        Args:
-            model_name: Model identifier
-            
-        Returns:
-            int: Embedding dimension
-        """
-        return self.model_dimensions.get(model_name, 384)
-    
-    def get_version(self, model_name: str) -> str:
-        """
-        Get model version string.
-        
-        Args:
-            model_name: Model identifier
-            
-        Returns:
-            str: Model version
-        """
-        if model_name not in self.models:
-            return "unknown"
-        
-        # Return model name as version for now
-        # In production, track actual model versions
-        return model_name
-    
-    async def health_check(self) -> Dict[str, bool]:
-        """
-        Check if all models are loaded and functional.
+        Check if models are loaded and functional.
         
         Returns:
-            Dict mapping model names to health status
+            Dict with health status for each model
         """
         logger.debug("Performing embedding service health check")
         
         health = {}
         
-        for model_name in ['all-MiniLM-L6-v2', 'specter2']:
+        for model_name in ['minilm', 'specter']:
             try:
-                # Try to encode a test string
-                test_embedding = await self.embed_text(
-                    "test",
-                    model_name,
-                    normalize=True
+                # Test encoding
+                test_embedding = self.encode_text(
+                    "health check test",
+                    model=model_name
                 )
-                health[model_name] = len(test_embedding) > 0
+                
+                # Verify embedding is correct shape
+                expected_dim = 384 if model_name == 'minilm' else 768
+                is_healthy = (
+                    test_embedding is not None and
+                    len(test_embedding) == expected_dim
+                )
+                
+                health[model_name] = 'healthy' if is_healthy else 'unhealthy'
+                
             except Exception as e:
                 logger.error(
-                    "Model health check failed",
+                    "Health check failed for model",
                     model=model_name,
                     error=str(e)
                 )
-                health[model_name] = False
+                health[model_name] = 'unhealthy'
         
         logger.info(
             "Health check complete",
@@ -457,3 +320,22 @@ class EmbeddingService:
         )
         
         return health
+
+
+# Create singleton instance that will be imported by other services
+_embedding_service = None
+
+
+def get_embedding_service() -> EmbeddingService:
+    """
+    Get the singleton embedding service instance.
+    
+    Returns:
+        EmbeddingService: The singleton instance
+    """
+    global _embedding_service
+    
+    if _embedding_service is None:
+        _embedding_service = EmbeddingService()
+    
+    return _embedding_service

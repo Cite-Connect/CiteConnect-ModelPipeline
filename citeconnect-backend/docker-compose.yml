@@ -18,8 +18,12 @@ services:
       - MLFLOW_TRACKING_URI=http://mlflow:5000
       - SECRET_KEY=${SECRET_KEY}
     volumes:
+      - .:/app
+      - ./scripts:/app/scripts
+      - ./services:/app/services
       - ./models:/app/models
       - ./logs:/app/logs
+      - mlflow_data:/mlflow
     depends_on:
       - redis
       - mlflow
@@ -29,7 +33,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 180s
 
   # Redis Cache
   redis:
@@ -47,20 +51,25 @@ services:
       retries: 3
 
   # MLflow Tracking Server
+  # MLflow Tracking Server
   mlflow:
-    image: python:3.11-slim
+    # Use a pre-built image that already has mlflow installed
+    image: ghcr.io/mlflow/mlflow:v2.14.1
     ports:
       - "5001:5000"
     volumes:
       - mlflow_data:/mlflow
+    environment:
+      # Ensure it binds to all interfaces so Docker can map it
+      - MLFLOW_HOST=0.0.0.0
     command: >
-      sh -c "pip install mlflow psycopg2-binary &&
-             mlflow server 
-             --backend-store-uri sqlite:///mlflow/mlflow.db 
-             --default-artifact-root /mlflow/artifacts 
-             --host 0.0.0.0 
-             --port 5000"
+      mlflow server 
+      --backend-store-uri sqlite:///mlflow/mlflow.db 
+      --default-artifact-root /mlflow/artifacts 
+      --host 0.0.0.0 
+      --port 5000
     restart: unless-stopped
+    # Use a simpler healthcheck compatible with basic images
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
       interval: 30s

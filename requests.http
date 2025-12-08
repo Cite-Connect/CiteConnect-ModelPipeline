@@ -1,0 +1,278 @@
+### CiteConnect API Requests
+
+### Variables
+@baseUrl = http://localhost:8000/api/v1
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3MSwiZW1haWwiOiJzbW9oYW50eTE4QGdtYWlsLmNvbSIsImV4cCI6MTc2NTE1OTI2M30.8a2HArpofRIgOEF2z6-tK0Fz4G4ceTyNuzC6ZfcZaZs
+@prodUrl = https://citeconnect-backend-api-897523647765.us-central1.run.app/api/v1
+
+### Health Check
+GET http://localhost:8000/health
+
+### User Registration
+POST {{baseUrl}}/users/register
+Content-Type: application/json
+
+{
+  "email": "smohanty18@gmail.com",
+  "password": "Agent@123",
+  "full_name": "Sahil Mohanty"
+}
+
+### 5. Create User Profile (Quantum Computing Example)
+POST {{baseUrl}}/users/71/profile
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "primary_domain": "quantum_computing",
+  "reading_level": "advanced",
+  "interests": [
+    "quantum algorithms",
+    "quantum error correction",
+    "quantum supremacy",
+    "quantum machine learning"
+  ],
+  "research_stage": "postdoc",
+  "sub_domains": [
+    "quantum circuits",
+    "quantum cryptography"
+  ],
+  "research_methods": [
+    "quantum simulation",
+    "theoretical analysis",
+    "experimental quantum physics"
+  ],
+  "research_goals": [
+    "develop new quantum algorithms",
+    "prove theoretical results",
+    "collaborate on experiments"
+  ],
+  "time_availability": "full_time_researcher",
+  "years_experience": 5,
+  "h_index": 8,
+  "prefers_recent_papers": true,
+  "prefers_high_impact": true,
+  "prefers_open_access": true,
+  "preferred_venues": [
+    "Nature",
+    "Physical Review Letters",
+    "Quantum",
+    "STOC"
+  ],
+  "institution": "Caltech",
+  "department": "Physics",
+  "looking_for_collaborators": true
+}
+
+
+
+### User Login
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "smohanty18@gmail.com",
+  "password": "Agent@123"
+}
+
+### 16. Logout User
+POST {{baseUrl}}/users/logout
+Authorization: Bearer {{token}}
+
+### 17. Try to use token after logout (should still work - JWT limitation)
+GET {{baseUrl}}/users/71/profile
+Authorization: Bearer {{token}}
+
+### 18. Try to logout without token (Should fail 401)
+POST {{baseUrl}}/users/logout
+
+### Get User Profile
+GET {{baseUrl}}/users/1/profile
+Authorization: Bearer {{token}}
+
+### Get User State
+GET {{baseUrl}}/users/1/state
+Authorization: Bearer {{token}}
+
+### Search Papers
+POST {{baseUrl}}/papers/search
+Content-Type: application/json
+
+{
+  "query": "deep learning medical imaging",
+  "limit": 10
+}
+
+### Get Recommendations (requires paper data)
+POST {{baseUrl}}/recommendations
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "user_id": 2,
+  "count": 5,
+  "model_preference": "all-MiniLM-L6-v2",
+  "session_id": "test-session-x"
+}
+
+### Track Interaction
+POST {{baseUrl}}/interactions/1
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "paper_id": "paper_id_here",
+  "interaction_type": "save",
+  "context": {
+    "source": "recommendation",
+    "position": 1,
+    "session_id": "test-session-1"
+  }
+}
+
+
+### 1. Get Full Citation Network (Depth 1, 50 nodes)
+GET {{baseUrl}}/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?depth=1&max_nodes=50&include_metadata=true
+Authorization: Bearer {{token}}
+
+
+
+### ==============================================
+### CITATION GRAPH ENDPOINTS - DUAL MODEL SUPPORT
+### ==============================================
+
+### 1. Get Citation Network (Default Model - from config)
+GET {{baseUrl}}/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=1&max_nodes=50&include_metadata=true
+Authorization: Bearer {{token}}
+
+###
+
+### 2. Get Citation Network (Explicit MiniLM Model)
+GET {{baseUrl}}/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=1&max_nodes=50&embedding_model=minilm
+Authorization: Bearer {{token}}
+
+###
+
+### 3. Get Citation Network (SPECTER Model)
+GET {{baseUrl}}/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=1&max_nodes=50&embedding_model=specter
+Authorization: Bearer {{token}}
+
+###
+
+### 4. Compare Models - MiniLM vs SPECTER (Same Paper)
+### Run both and compare semantic nodes
+GET {{baseUrl}}/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?embedding_model=minilm&max_nodes=30
+Authorization: Bearer {{token}}
+
+###
+
+GET {{baseUrl}}/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?embedding_model=specter&max_nodes=30
+Authorization: Bearer {{token}}
+
+###
+
+### 5. Get Graph Summary (Quick Stats)
+GET {{baseUrl}}/graph/summary/61827838932597591901992a4d3a86b71b42ac69
+Authorization: Bearer {{token}}
+
+###
+
+### ==============================================
+### Test with Other Papers from Recommendation Response
+### ==============================================
+
+### 6. Citation Network - Second Paper
+GET {{baseUrl}}/api/v1/graph/citation-network/8470d8070b022c791639ef995b455621cf005379?depth=1&max_nodes=50
+Authorization: Bearer {{token}}
+
+###
+
+### 7. Citation Network - Third Paper
+GET {{baseUrl}}/api/v1/graph/citation-network/75d03c3953e6c8f701f250a9ecb8aecc05c2e689?depth=1&max_nodes=50
+Authorization: Bearer {{token}}
+
+###
+
+### 8. Graph Summary - Second Paper
+GET {{baseUrl}}/api/v1/graph/summary/8470d8070b022c791639ef995b455621cf005379
+Authorization: Bearer {{token}}
+
+###
+
+### ==============================================
+### Test Different Parameters
+### ==============================================
+
+### 9. Maximum Nodes Test (100 nodes)
+GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=1&max_nodes=100
+Authorization: Bearer {{token}}
+
+###
+
+### 10. Minimum Nodes Test (10 nodes)
+GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=1&max_nodes=10
+Authorization: Bearer {{token}}
+
+###
+
+# ### ==============================================
+# ### Batch Summary Requests (For Recommendation Cards)
+# ### ==============================================
+
+# ### 11. Get summaries for all 5 recommended papers
+# ### Paper 1
+# GET {{baseUrl}}/api/v1/graph/summary/61827838932597591901992a4d3a86b71b42ac69
+# Authorization: Bearer {{token}}
+
+# ###
+
+# ### Paper 2
+# GET {{baseUrl}}/api/v1/graph/summary/8470d8070b022c791639ef995b455621cf005379
+# Authorization: Bearer {{token}}
+
+# ###
+
+# ### Paper 3
+# GET {{baseUrl}}/api/v1/graph/summary/75d03c3953e6c8f701f250a9ecb8aecc05c2e689
+# Authorization: Bearer {{token}}
+
+# ###
+
+# ### Paper 4
+# GET {{baseUrl}}/api/v1/graph/summary/3893783a815a5d46a26f154683115d4195b1b004
+# Authorization: Bearer {{token}}
+
+# ###
+
+# ### Paper 5
+# GET {{baseUrl}}/api/v1/graph/summary/5123717445799d8137327f4041e8d5a5a2c91379
+# Authorization: Bearer {{token}}
+
+###
+
+### ==============================================
+### Error Cases
+### ==============================================
+
+### 12. Test with Invalid Paper ID
+GET {{baseUrl}}/api/v1/graph/citation-network/invalid_paper_id_12345
+Authorization: Bearer {{token}}
+
+###
+
+### 13. Test without Authentication
+GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69
+
+###
+
+### 14. Test with Invalid Depth Parameter
+GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=5
+Authorization: Bearer {{token}}
+
+###
+
+### 15. Test with Invalid max_nodes Parameter
+GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?max_nodes=500
+Authorization: Bearer {{token}}
+
+###

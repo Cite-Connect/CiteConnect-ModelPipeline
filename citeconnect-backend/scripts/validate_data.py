@@ -1,6 +1,7 @@
 """
 Data quality validation script.
 Validates that paper data is suitable for recommendations and ground truth.
+Updated to match Supabase schema field names.
 """
 import asyncio
 import sys
@@ -17,6 +18,80 @@ setup_logging()
 logger = get_logger(__name__)
 
 
+async def validate_users_and_profiles():
+    """Validate that user data is set up correctly."""
+    print("\n" + "=" * 70)
+    print("USER & PROFILE VALIDATION")
+    print("=" * 70)
+    
+    # Check users
+    user_count = await db.fetchval("SELECT COUNT(*) FROM users WHERE is_active = true")
+    print(f"\n👥 Active Users: {user_count}")
+    
+    if user_count == 0:
+        print("   ⚠️  No users found. Create test users first.")
+        return False
+    
+    # Check profiles
+    profile_count = await db.fetchval("SELECT COUNT(*) FROM user_profiles_extended")
+    print(f"👤 User Profiles: {profile_count}/{user_count}")
+    
+    if profile_count < user_count:
+        print(f"   ⚠️  {user_count - profile_count} users without profiles")
+    
+    # Check profile completeness distribution
+    completeness_stats = await db.fetchrow("""
+        SELECT 
+            AVG(profile_completeness) as avg,
+            MIN(profile_completeness) as min,
+            MAX(profile_completeness) as max
+        FROM user_profiles_extended
+    """)
+    
+    if completeness_stats and completeness_stats['avg']:
+        print(f"\n📊 Profile Completeness:")
+        print(f"   Average: {completeness_stats['avg']:.2f}")
+        print(f"   Range: {completeness_stats['min']:.2f} - {completeness_stats['max']:.2f}")
+        
+        if completeness_stats['avg'] < 0.5:
+            print("   ⚠️  Low average completeness - recommendations may be less accurate")
+    
+    # Check interests in hierarchy table
+    interest_count = await db.fetchval("SELECT COUNT(*) FROM user_interest_hierarchy")
+    avg_interests = interest_count / profile_count if profile_count > 0 else 0
+    
+    print(f"\n🎯 User Interests:")
+    print(f"   Total interests: {interest_count}")
+    print(f"   Average per user: {avg_interests:.1f}")
+    
+    if avg_interests < 3:
+        print("   ⚠️  Users should have at least 3 interests each")
+    else:
+        print("   ✅ Good interest coverage")
+    
+    # Check by interest level
+    by_level = await db.fetch("""
+        SELECT interest_level, COUNT(*) as count
+        FROM user_interest_hierarchy
+        GROUP BY interest_level
+        ORDER BY interest_level
+    """)
+    
+    if len(by_level) > 0:
+        print("\n   By Interest Level:")
+        for row in by_level:
+            print(f"     Level {row['interest_level']}: {row['count']} interests")
+    
+    # Check recommendation states
+    state_count = await db.fetchval("SELECT COUNT(*) FROM user_recommendation_state")
+    print(f"\n📈 Recommendation States: {state_count}/{user_count}")
+    
+    if state_count < user_count:
+        print(f"   ⚠️  {user_count - state_count} users without recommendation states")
+    
+    return profile_count >= user_count and interest_count >= (profile_count * 3)
+
+
 async def validate_papers():
     """Validate paper data quality."""
     print("\n" + "=" * 70)
@@ -29,6 +104,7 @@ async def validate_papers():
     
     if total == 0:
         print("❌ CRITICAL: No papers found in database!")
+        print("   Backend is working, but needs paper data to generate recommendations.")
         return False
     
     # Check distribution by domain
@@ -41,15 +117,25 @@ async def validate_papers():
     """)
     
     all_domains_ok = True
+    required_domains = ['healthcare', 'fintech', 'quantum_computing']
+    
     for row in by_domain:
         domain = row['domain']
         count = row['count']
         
         if count < 100:
-            print(f"   ⚠️  {domain}: {count} papers (need 100+)")
+            print(f"   ⚠️  {domain}: {count} papers (need 100+ for quality recommendations)")
             all_domains_ok = False
         else:
             print(f"   ✅ {domain}: {count} papers")
+    
+    # Check if all required domains are present
+    found_domains = [row['domain'] for row in by_domain]
+    missing_domains = set(required_domains) - set(found_domains)
+    
+    if missing_domains:
+        print(f"   ⚠️  Missing domains: {', '.join(missing_domains)}")
+        all_domains_ok = False
     
     # Check required fields
     print("\n📝 Data Completeness:")
@@ -58,22 +144,25 @@ async def validate_papers():
         SELECT COUNT(*) FROM papers WHERE abstract IS NOT NULL
     """)
     abstract_pct = (with_abstract / total * 100) if total > 0 else 0
-    print(f"   Abstract: {with_abstract}/{total} ({abstract_pct:.1f}%)")
+    status = "✅" if abstract_pct > 90 else "⚠️"
+    print(f"   {status} Abstract: {with_abstract}/{total} ({abstract_pct:.1f}%)")
     
     with_year = await db.fetchval("""
         SELECT COUNT(*) FROM papers WHERE year IS NOT NULL
     """)
     year_pct = (with_year / total * 100) if total > 0 else 0
-    print(f"   Year: {with_year}/{total} ({year_pct:.1f}%)")
+    status = "✅" if year_pct > 95 else "⚠️"
+    print(f"   {status} Year: {with_year}/{total} ({year_pct:.1f}%)")
     
     with_authors = await db.fetchval("""
         SELECT COUNT(*) FROM papers 
         WHERE authors IS NOT NULL AND array_length(authors, 1) > 0
     """)
     authors_pct = (with_authors / total * 100) if total > 0 else 0
-    print(f"   Authors: {with_authors}/{total} ({authors_pct:.1f}%)")
+    status = "✅" if authors_pct > 90 else "⚠️"
+    print(f"   {status} Authors: {with_authors}/{total} ({authors_pct:.1f}%)")
     
-    # Check citation network (using correct field names)
+    # Check citation network
     print("\n🔗 Citation Network:")
     
     with_refs = await db.fetchval("""
@@ -81,16 +170,18 @@ async def validate_papers():
         WHERE array_length(reference_ids, 1) > 0
     """)
     refs_pct = (with_refs / total * 100) if total > 0 else 0
-    print(f"   Papers with references: {with_refs}/{total} ({refs_pct:.1f}%)")
+    status = "✅" if refs_pct > 50 else "⚠️"
+    print(f"   {status} Papers with references: {with_refs}/{total} ({refs_pct:.1f}%)")
     
     with_cites = await db.fetchval("""
         SELECT COUNT(*) FROM papers 
         WHERE array_length(citation_ids, 1) > 0
     """)
     cites_pct = (with_cites / total * 100) if total > 0 else 0
-    print(f"   Papers with citations: {with_cites}/{total} ({cites_pct:.1f}%)")
+    status = "✅" if cites_pct > 50 else "⚠️"
+    print(f"   {status} Papers with citations: {with_cites}/{total} ({cites_pct:.1f}%)")
     
-    # Ground truth candidates (using correct field names)
+    # Ground truth candidates
     print("\n🎯 Ground Truth Candidates:")
     
     candidates = await db.fetchval("""
@@ -104,7 +195,7 @@ async def validate_papers():
     else:
         print(f"   ✅ {candidates} candidates (good for ground truth)")
     
-    # Check reference coverage (using correct field names)
+    # Check reference coverage
     avg_coverage = await db.fetchval("""
         WITH paper_coverage AS (
             SELECT 
@@ -125,64 +216,125 @@ async def validate_papers():
     """)
     
     coverage_pct = (avg_coverage * 100) if avg_coverage else 0
-    print(f"   Average reference coverage: {coverage_pct:.1f}%")
+    status = "✅" if coverage_pct > 30 else "⚠️"
+    print(f"   {status} Average reference coverage: {coverage_pct:.1f}%")
     
     if coverage_pct < 30:
-        print("   ⚠️  Low coverage - may affect ground truth quality")
+        print("      Low coverage may affect ground truth quality")
     
     return all_domains_ok and total >= 300 and candidates >= 50
 
 
 async def validate_embeddings():
-    """Validate embedding data quality."""
+    """Validate embedding data quality for BOTH models."""
     print("\n" + "=" * 70)
     print("EMBEDDING DATA VALIDATION")
     print("=" * 70)
     
-    # Check MiniLM embeddings
+    total_papers = await db.fetchval("SELECT COUNT(*) FROM papers")
+    
+    if total_papers == 0:
+        print("   ⚠️  No papers in database - skipping embedding validation")
+        return False
+    
+    # Check MiniLM embeddings (384-dim)
     print("\n🔢 MiniLM Embeddings (384-dim):")
     
-    total_papers = await db.fetchval("SELECT COUNT(*) FROM papers")
-    total_embeddings = await db.fetchval("SELECT COUNT(*) FROM paper_embeddings_minilm")
+    minilm_count = await db.fetchval("SELECT COUNT(*) FROM paper_embeddings_minilm")
+    minilm_coverage = (minilm_count / total_papers * 100) if total_papers > 0 else 0
     
-    coverage = (total_embeddings / total_papers * 100) if total_papers > 0 else 0
     print(f"   Papers: {total_papers}")
-    print(f"   Embeddings: {total_embeddings}")
-    print(f"   Coverage: {coverage:.1f}%")
+    print(f"   Embeddings: {minilm_count}")
+    print(f"   Coverage: {minilm_coverage:.1f}%")
     
-    if coverage < 95:
-        print(f"   ❌ CRITICAL: Only {coverage:.1f}% coverage (need 95%+)")
-        return False
+    minilm_ok = False
+    if minilm_coverage < 95:
+        print(f"   ⚠️  Coverage below 95% (missing {total_papers - minilm_count} embeddings)")
     else:
-        print(f"   ✅ Coverage is good ({coverage:.1f}%)")
+        print(f"   ✅ Excellent coverage!")
+        minilm_ok = True
     
-    # Check embedding dimensions
-    print("\n📏 Embedding Dimension Check:")
+    # Check MiniLM dimension
+    if minilm_count > 0:
+        sample_minilm = await db.fetchval("""
+            SELECT vector_dims(embedding) 
+            FROM paper_embeddings_minilm 
+            LIMIT 1
+        """)
+        
+        if sample_minilm:
+            minilm_dim = sample_minilm
+            if minilm_dim != 384:
+                print(f"   ❌ Wrong dimension ({minilm_dim}, expected 384)")
+                minilm_ok = False
+            else:
+                print(f"   ✅ Correct dimension (384)")
     
-    sample_embedding = await db.fetchval("""
-        SELECT embedding 
-        FROM paper_embeddings_minilm 
-        LIMIT 1
-    """)
+    # Check SPECTER embeddings (768-dim)
+    print("\n🔢 SPECTER Embeddings (768-dim):")
     
-    if sample_embedding:
-        dim = len(sample_embedding)
-        if dim != 384:
-            print(f"   ❌ CRITICAL: Wrong dimension ({dim}, expected 384)")
-            return False
-        else:
-            print(f"   ✅ Correct dimension (384)")
+    specter_count = await db.fetchval("SELECT COUNT(*) FROM paper_embeddings_specter")
+    specter_coverage = (specter_count / total_papers * 100) if total_papers > 0 else 0
     
-    # Check for null embeddings
-    null_count = await db.fetchval("""
+    print(f"   Papers: {total_papers}")
+    print(f"   Embeddings: {specter_count}")
+    print(f"   Coverage: {specter_coverage:.1f}%")
+    
+    specter_ok = False
+    if specter_count == 0:
+        print(f"   ⚠️  No SPECTER embeddings found (optional)")
+    elif specter_coverage < 95:
+        print(f"   ⚠️  Coverage below 95% (missing {total_papers - specter_count} embeddings)")
+    else:
+        print(f"   ✅ Excellent coverage!")
+        specter_ok = True
+    
+    # Check SPECTER dimension
+    if specter_count > 0:
+        sample_specter = await db.fetchval("""
+            SELECT vector_dims(embedding)
+            FROM paper_embeddings_specter 
+            LIMIT 1
+        """)
+        
+        if sample_specter:
+            specter_dim = sample_specter
+            if specter_dim != 768:
+                print(f"   ⚠️  Wrong dimension ({specter_dim}, expected 768)")
+            else:
+                print(f"   ✅ Correct dimension (768)")
+    
+    # Check for null embeddings in both tables
+    print("\n🔍 Data Quality Checks:")
+    
+    minilm_nulls = await db.fetchval("""
         SELECT COUNT(*) FROM paper_embeddings_minilm
         WHERE embedding IS NULL
     """)
     
-    if null_count > 0:
-        print(f"   ⚠️  WARNING: {null_count} null embeddings found")
+    if minilm_nulls > 0:
+        print(f"   ⚠️  MiniLM: {minilm_nulls} null embeddings found")
+    else:
+        print(f"   ✅ MiniLM: No null embeddings")
     
-    return coverage >= 95
+    if specter_count > 0:
+        specter_nulls = await db.fetchval("""
+            SELECT COUNT(*) FROM paper_embeddings_specter
+            WHERE embedding IS NULL
+        """)
+        
+        if specter_nulls > 0:
+            print(f"   ⚠️  SPECTER: {specter_nulls} null embeddings found")
+        else:
+            print(f"   ✅ SPECTER: No null embeddings")
+    
+    # Summary
+    print("\n📊 Embedding Summary:")
+    print(f"   MiniLM ready: {'YES ✅' if minilm_ok else 'NO ⚠️'}")
+    print(f"   SPECTER ready: {'YES ✅' if specter_ok else 'NO ⚠️' if specter_count > 0 else 'NOT POPULATED ⚠️'}")
+    
+    # At least one model should have good coverage
+    return minilm_ok or specter_ok
 
 
 async def validate_ground_truth_readiness():
@@ -196,8 +348,29 @@ async def validate_ground_truth_readiness():
     
     if existing_gt > 0:
         print(f"\n⚠️  Ground truth already initialized ({existing_gt} papers)")
-        print("   Run initialization script to refresh if needed")
+        print("   To refresh, run initialization script again")
+        
+        # Show existing ground truth stats
+        by_domain = await db.fetch("""
+            SELECT domain, COUNT(*) as count
+            FROM ground_truth_papers
+            GROUP BY domain
+            ORDER BY domain
+        """)
+        
+        if len(by_domain) > 0:
+            print("\n   Current Ground Truth Distribution:")
+            for row in by_domain:
+                print(f"     - {row['domain']}: {row['count']} papers")
+        
         return True
+    
+    # Check if we have any papers to analyze
+    total_papers = await db.fetchval("SELECT COUNT(*) FROM papers")
+    
+    if total_papers == 0:
+        print("\n❌ No papers in database - cannot initialize ground truth")
+        return False
     
     # Check candidates
     print("\n🔍 Analyzing Candidate Papers:")
@@ -219,7 +392,7 @@ async def validate_ground_truth_readiness():
         total_candidates += count
         
         if count < 15:
-            print(f"   ⚠️  {row['domain']}: {count} candidates (need 15+ per domain)")
+            print(f"   ⚠️  {row['domain']}: {count} candidates (ideally 15+ per domain)")
         else:
             print(f"   ✅ {row['domain']}: {count} candidates")
     
@@ -227,10 +400,17 @@ async def validate_ground_truth_readiness():
     
     if total_candidates < 50:
         print("   ❌ Not enough candidates for ground truth")
+        print("   Need papers with:")
+        print("     - 10-100 references (reference_ids)")
+        print("     - At least 10 citations (citation_count)")
         return False
+    elif total_candidates < 100:
+        print("   ⚠️  Minimum candidates met, but 100+ recommended")
+    else:
+        print("   ✅ Excellent candidate pool!")
     
     # Check reference coverage distribution
-    print("\n📊 Reference Coverage Distribution:")
+    print("\n📊 Reference Coverage Analysis:")
     
     coverage_stats = await db.fetchrow("""
         WITH coverage AS (
@@ -248,21 +428,32 @@ async def validate_ground_truth_readiness():
         SELECT 
             AVG(coverage_ratio) as avg_coverage,
             MIN(coverage_ratio) as min_coverage,
-            MAX(coverage_ratio) as max_coverage
+            MAX(coverage_ratio) as max_coverage,
+            COUNT(*) as paper_count
         FROM coverage
+        WHERE coverage_ratio IS NOT NULL
     """)
     
-    if coverage_stats:
-        avg = coverage_stats['avg_coverage'] or 0
-        min_cov = coverage_stats['min_coverage'] or 0
-        max_cov = coverage_stats['max_coverage'] or 0
+    if coverage_stats and coverage_stats['avg_coverage']:
+        avg = coverage_stats['avg_coverage']
+        min_cov = coverage_stats['min_coverage']
+        max_cov = coverage_stats['max_coverage']
         
         print(f"   Average: {avg*100:.1f}%")
-        print(f"   Min: {min_cov*100:.1f}%")
-        print(f"   Max: {max_cov*100:.1f}%")
+        print(f"   Range: {min_cov*100:.1f}% - {max_cov*100:.1f}%")
+        print(f"   Papers analyzed: {coverage_stats['paper_count']}")
         
         if avg < 0.3:
-            print("   ⚠️  Low average coverage - ground truth quality may be limited")
+            print("   ⚠️  Low average coverage (<30%)")
+            print("      Many referenced papers not in corpus")
+            print("      Ground truth evaluation will be limited")
+        elif avg < 0.5:
+            print("   ⚠️  Medium coverage (30-50%)")
+            print("      Acceptable but could be better")
+        else:
+            print("   ✅ Good coverage (>50%)")
+    else:
+        print("   ⚠️  Could not calculate coverage (no papers with references)")
     
     return total_candidates >= 50
 
@@ -275,6 +466,7 @@ async def main():
     
     try:
         # Run all validations
+        users_ok = await validate_users_and_profiles()
         papers_ok = await validate_papers()
         embeddings_ok = await validate_embeddings()
         ground_truth_ready = await validate_ground_truth_readiness()
@@ -284,22 +476,32 @@ async def main():
         print("VALIDATION SUMMARY")
         print("=" * 70)
         
-        print(f"\n✓ Paper Data: {'PASS ✅' if papers_ok else 'FAIL ❌'}")
+        print(f"\n✓ User Data: {'PASS ✅' if users_ok else 'NEEDS ATTENTION ⚠️'}")
+        print(f"✓ Paper Data: {'PASS ✅' if papers_ok else 'FAIL ❌'}")
         print(f"✓ Embeddings: {'PASS ✅' if embeddings_ok else 'FAIL ❌'}")
         print(f"✓ Ground Truth Ready: {'YES ✅' if ground_truth_ready else 'NO ❌'}")
         
+        if users_ok:
+            print("\n✅ User management is working!")
+        
         if papers_ok and embeddings_ok:
-            print("\n🎉 Data quality is good!")
+            print("\n🎉 Paper data quality is good!")
             
             if ground_truth_ready:
                 print("\n📌 NEXT STEP: Run ground truth initialization")
-                print("   docker-compose exec api python scripts/initialize_ground_truth.py")
+                print("   Command: docker-compose exec api python scripts/initialize_ground_truth.py")
             else:
                 print("\n⚠️  Need more papers with citation data for ground truth")
-                print("   Current candidates may be sufficient for testing")
+                print("   Current candidates may be sufficient for basic testing")
+                print("   For production, aim for 100+ candidates")
         else:
             print("\n❌ Data quality issues found - see details above")
-            print("   Fix issues before proceeding")
+            print("\n📋 Action Items:")
+            if not papers_ok:
+                print("   1. Load paper data (minimum 100 per domain)")
+            if not embeddings_ok:
+                print("   2. Generate embeddings for all papers (384-dim)")
+            print("   3. Ensure citation networks are complete (reference_ids, citation_ids)")
         
         print("\n" + "=" * 70)
         

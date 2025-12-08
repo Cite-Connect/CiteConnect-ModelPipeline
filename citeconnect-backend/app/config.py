@@ -3,16 +3,29 @@ Configuration management for CiteConnect backend.
 Loads settings from environment variables with validation.
 """
 import structlog
-from pydantic_settings import BaseSettings
+import os
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
 from typing import Optional
 from functools import lru_cache
+from pydantic import Field
 
 logger = structlog.get_logger(__name__)
 
+# Resolve .env file path relative to this config file
+# This ensures it works regardless of where the server is run from
+_config_dir = Path(__file__).parent.parent  # Go up from app/config.py to citeconnect-backend/
+_env_file = _config_dir / ".env"
 
 class Settings(BaseSettings):
     """Application settings with environment variable support."""
     
+# --- IMPORTANT CHANGE HERE ---
+    model_config = SettingsConfigDict(
+        env_file=str(_env_file) if _env_file.exists() else ".env",  # Use absolute path if exists, else fallback
+        env_file_encoding="utf-8",
+        extra="allow"               # Kept your original 'extra: "allow"'
+    )    
     # Application
     APP_NAME: str = "CiteConnect"
     APP_VERSION: str = "1.0.0"
@@ -22,21 +35,15 @@ class Settings(BaseSettings):
     
     # API
     API_V1_PREFIX: str = "/api/v1"
-    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000"]
+    CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000", "https://pulp-three.vercel.app"]
     
     # Database - Supabase PostgreSQL
     SUPABASE_URL: str
-    SUPABASE_KEY: str
+    SUPABASE_KEY: Optional[str] = None  # Optional - only needed for Supabase auth/storage
     DATABASE_URL: str  # postgres:// connection string
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
-
-    POSTGRES_USER: str = "postgres"
-    POSTGRES_PASSWORD: str = "CiteConnect-Dev"
-    POSTGRES_DB: str = "postgres"
-    POSTGRES_HOST: str = "db.wvvogncqrqzfbfztkwfo.supabase.co"
-    POSTGRES_PORT: str = "5432"
     
     # Redis Cache
     REDIS_HOST: str = "localhost"
@@ -47,7 +54,7 @@ class Settings(BaseSettings):
     
     # ML Models
     EMBEDDING_MODEL_MINILM: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_MODEL_SPECTER: str = "allenai/specter2_base"
+    EMBEDDING_MODEL_SPECTER: str = "allenai/specter2"
     MODEL_CACHE_DIR: str = "./models"
     DEFAULT_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE: int = 32
@@ -61,6 +68,10 @@ class Settings(BaseSettings):
     GCP_PROJECT_ID: Optional[str] = None
     GCP_BUCKET_NAME: Optional[str] = None
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = None
+    
+    # LLM Services (OpenAI for query refinement)
+    OPENAI_API_KEY: Optional[str] = None
+    OPENAI_MODEL: str = "gpt-4o-mini"  # Cheapest OpenAI model. Options: gpt-4o-mini, gpt-3.5-turbo
     
     # Performance Thresholds
     COLD_START_PROFILE_ALIGNMENT_THRESHOLD: float = 0.6
@@ -111,11 +122,68 @@ class Settings(BaseSettings):
     # Background Workers
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/2"
-    
-    class Config:
-        env_file = ".env"
-        case_sensitive = True
 
+    # Interaction thresholds for stage transitions
+    EARLY_STAGE_THRESHOLD:int = 10      # cold_start → early
+    MATURE_STAGE_THRESHOLD:int = 50     # early → mature
+    EXPERT_STAGE_THRESHOLD:int = 200    # mature → expert
+    
+    # Update frequency
+    UPDATE_EVERY_N_INTERACTIONS:int = 10
+
+    # Allowed values from Supabase schema
+    ALLOWED_DOMAINS: list[str] = ['healthcare', 'fintech', 'quantum_computing']
+    ALLOWED_RESEARCH_STAGES: list[str] = [
+        'undergraduate', 'masters', 'phd', 'postdoc', 
+        'professor', 'industry', 'independent'
+    ]
+    ALLOWED_READING_LEVELS: list[str] = ['introductory', 'intermediate', 'advanced', 'expert']
+    ALLOWED_TIME_AVAILABILITY: list[str] = ['casual_reader', 'part_time_researcher', 'full_time_researcher']
+
+    # Graph Generation Settings
+    GRAPH_SEMANTIC_MIN_SIMILARITY: float = Field(
+        default=0.6,
+        env="GRAPH_SEMANTIC_MIN_SIMILARITY",
+        description="Minimum cosine similarity threshold for semantic matching (0-1)"
+    )
+    
+    GRAPH_SEMANTIC_LIMIT: int = Field(
+        default=20,
+        env="GRAPH_SEMANTIC_LIMIT",
+        description="Maximum number of semantic similar papers to retrieve"
+    )
+    
+    GRAPH_HYBRID_TRIGGER_THRESHOLD: int = Field(
+        default=5,
+        env="GRAPH_HYBRID_TRIGGER_THRESHOLD",
+        description="Minimum citation nodes before triggering semantic fallback"
+    )
+    
+    GRAPH_DEFAULT_MODEL: str = Field(
+        default="minilm",
+        env="GRAPH_DEFAULT_MODEL",
+        description="Default embedding model for semantic similarity (minilm or specter)"
+    )
+    
+    GRAPH_DOMAIN_YEAR_RANGE: int = Field(
+        default=3,
+        env="GRAPH_DOMAIN_YEAR_RANGE",
+        description="Year range (+/-) for domain filtering fallback"
+    )
+
+    # Embedding Model Configuration
+    EMBEDDING_MODELS: dict = {
+        "minilm": {
+            "table": "paper_embeddings_minilm",
+            "dimension": 384,
+            "name": "all-MiniLM-L6-v2"
+        },
+        "specter": {
+            "table": "paper_embeddings_specter",
+            "dimension": 768,
+            "name": "allenai/specter2"
+        }
+    }
 
 @lru_cache()
 def get_settings() -> Settings:
