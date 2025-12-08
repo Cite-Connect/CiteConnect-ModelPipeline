@@ -50,14 +50,8 @@ jobs:
             --port 8000 \
             --memory 4Gi \
             --cpu 2 \
-            --timeout 600 \
+            --timeout 900 \
             --allow-unauthenticated \
-            --set-env-vars DATABASE_URL="${{ secrets.DATABASE_URL }}" \
-            --set-env-vars SUPABASE_URL="${{ secrets.SUPABASE_URL }}" \
-            --set-env-vars SUPABASE_KEY="${{ secrets.SUPABASE_KEY }}" \
-            --set-env-vars ENVIRONMENT="development" \
-            --set-env-vars DEBUG="false" \
-            --set-env-vars LOG_LEVEL="INFO"
 
       - name: Verify Deployment
         run: |
