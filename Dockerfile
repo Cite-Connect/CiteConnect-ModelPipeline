@@ -13,6 +13,9 @@ RUN apt-get update && apt-get install -y \
 # Copy requirements from citeconnect-backend directory
 COPY citeconnect-backend/requirements.txt .
 
+# Upgrade pip
+RUN pip install --upgrade pip
+
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
