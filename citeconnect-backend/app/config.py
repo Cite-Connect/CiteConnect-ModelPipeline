@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     
     # ML Models
     EMBEDDING_MODEL_MINILM: str = "sentence-transformers/all-MiniLM-L6-v2"
-    EMBEDDING_MODEL_SPECTER: str = "allenai/specter2"
+    EMBEDDING_MODEL_SPECTER: str = "allenai/specter"
     MODEL_CACHE_DIR: str = "./models"
     DEFAULT_EMBEDDING_MODEL: str = "all-MiniLM-L6-v2"
     EMBEDDING_BATCH_SIZE: int = 32
