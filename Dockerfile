@@ -44,9 +44,5 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
-
 # Run application - pointing to the correct module path
-CMD ["sh", "-c", "uvicorn citeconnect-backend.app.main:app --host 0.0.0.0 --port ${PORT:-8000} --log-level info --access-log"]
+CMD ["uvicorn", "citeconnect-backend.app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info", "--access-log"]
