@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 import time
-
+import os
 from app.config import settings
 from app.utils.logger import setup_logging, get_logger
 from app.db.connection import db
@@ -405,7 +405,7 @@ app.include_router(
 
 if __name__ == "__main__":
     import uvicorn
-    
+    port = int(os.getenv("DEPLOYMENT_PORT", 8000))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
