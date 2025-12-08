@@ -2,8 +2,8 @@
 
 ### Variables
 @baseUrl = http://localhost:8000/api/v1
-@token = 
- @prodUrl = https://citeconnect-backend-api-897523647765.us-central1.run.app/api/v1
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3MSwiZW1haWwiOiJzbW9oYW50eTE4QGdtYWlsLmNvbSIsImV4cCI6MTc2NTE1OTI2M30.8a2HArpofRIgOEF2z6-tK0Fz4G4ceTyNuzC6ZfcZaZs
+@prodUrl = https://citeconnect-backend-api-897523647765.us-central1.run.app/api/v1
 
 ### Health Check
 GET http://localhost:8000/health
@@ -13,32 +13,78 @@ POST {{baseUrl}}/users/register
 Content-Type: application/json
 
 {
-  "email": "tuser27@gmail.com",
-  "password": "tUser1235",
-  "full_name": "Test User 4"
+  "email": "smohanty18@gmail.com",
+  "password": "Agent@123",
+  "full_name": "Sahil Mohanty"
 }
+
+### 5. Create User Profile (Quantum Computing Example)
+POST {{baseUrl}}/users/71/profile
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{
+  "primary_domain": "quantum_computing",
+  "reading_level": "advanced",
+  "interests": [
+    "quantum algorithms",
+    "quantum error correction",
+    "quantum supremacy",
+    "quantum machine learning"
+  ],
+  "research_stage": "postdoc",
+  "sub_domains": [
+    "quantum circuits",
+    "quantum cryptography"
+  ],
+  "research_methods": [
+    "quantum simulation",
+    "theoretical analysis",
+    "experimental quantum physics"
+  ],
+  "research_goals": [
+    "develop new quantum algorithms",
+    "prove theoretical results",
+    "collaborate on experiments"
+  ],
+  "time_availability": "full_time_researcher",
+  "years_experience": 5,
+  "h_index": 8,
+  "prefers_recent_papers": true,
+  "prefers_high_impact": true,
+  "prefers_open_access": true,
+  "preferred_venues": [
+    "Nature",
+    "Physical Review Letters",
+    "Quantum",
+    "STOC"
+  ],
+  "institution": "Caltech",
+  "department": "Physics",
+  "looking_for_collaborators": true
+}
+
+
 
 ### User Login
 POST {{baseUrl}}/users/login
 Content-Type: application/json
 
 {
-  "email": "tuser25@gmail.com",
-  "password": "tUser1234"
+  "email": "smohanty18@gmail.com",
+  "password": "Agent@123"
 }
 
-### Create User Profile (replace {user_id})
-POST {{baseUrl}}/users/1/profile
-Content-Type: application/json
+### 16. Logout User
+POST {{baseUrl}}/users/logout
 Authorization: Bearer {{token}}
 
-{
-  "primary_domain": "healthcare",
-  "reading_level": "advanced",
-  "interests": ["machine learning", "medical imaging", "diagnostics"],
-  "research_stage": "phd",
-  "years_experience": 3
-}
+### 17. Try to use token after logout (should still work - JWT limitation)
+GET {{baseUrl}}/users/71/profile
+Authorization: Bearer {{token}}
+
+### 18. Try to logout without token (Should fail 401)
+POST {{baseUrl}}/users/logout
 
 ### Get User Profile
 GET {{baseUrl}}/users/1/profile
@@ -115,18 +161,18 @@ Authorization: Bearer {{token}}
 
 ### 4. Compare Models - MiniLM vs SPECTER (Same Paper)
 ### Run both and compare semantic nodes
-GET {{baseUrl}}/api/v1/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?embedding_model=minilm&max_nodes=30
+GET {{baseUrl}}/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?embedding_model=minilm&max_nodes=30
 Authorization: Bearer {{token}}
 
 ###
 
-GET {{baseUrl}}/api/v1/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?embedding_model=specter&max_nodes=30
+GET {{baseUrl}}/graph/citation-network/c8b25fab5608c3e033d34b4483ec47e68ba109b7?embedding_model=specter&max_nodes=30
 Authorization: Bearer {{token}}
 
 ###
 
 ### 5. Get Graph Summary (Quick Stats)
-GET {{baseUrl}}/api/v1/graph/summary/61827838932597591901992a4d3a86b71b42ac69
+GET {{baseUrl}}/graph/summary/61827838932597591901992a4d3a86b71b42ac69
 Authorization: Bearer {{token}}
 
 ###
