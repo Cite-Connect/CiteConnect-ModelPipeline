@@ -8,6 +8,11 @@ print('🚀 Downloading embedding models...')
 cache_dir = '/app/models'
 os.makedirs(cache_dir, exist_ok=True)
 
+import shutil
+if os.path.exists(cache_dir):
+    shutil.rmtree(cache_dir)
+    os.makedirs(cache_dir, exist_ok=True)
+
 # Model 1: MiniLM
 try:
     print('📥 Downloading all-MiniLM-L6-v2...')
