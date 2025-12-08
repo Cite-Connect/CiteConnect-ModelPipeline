@@ -10,17 +10,17 @@
       },
       "research_stage": {
         "underperforming_slices": [
-          "industry"
+          "masters"
         ],
         "boost_factor": 1.25,
-        "min_score_floor": 0.223
+        "min_score_floor": 0.242
       },
       "reading_level": {
         "underperforming_slices": [
           "intermediate"
         ],
         "boost_factor": 1.25,
-        "min_score_floor": 0.257
+        "min_score_floor": 0.255
       }
     }
   }

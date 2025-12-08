@@ -77,4 +77,4 @@ temp/
 *.tmp/
 
 #ML flow
-mlruns/
+mlruns/.venv/

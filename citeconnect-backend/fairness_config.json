@@ -1,0 +1,7 @@
+{
+  "generated_at": "2025-12-08T23:30:32.819168",
+  "metric": "precision_at_10",
+  "min_support": 5,
+  "ratio_threshold": 0.8,
+  "under_served_fields": []
+}

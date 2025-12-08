@@ -15,6 +15,7 @@ from app.db.repositories.user_repo import UserRepository
 from app.db.repositories.paper_repo import PaperRepository
 from app.db.repositories.ground_truth_repo import GroundTruthRepository
 from app.services.user_embedding_service import UserEmbeddingService
+from app.services.fairness_service import fairness_aware_rerank
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -29,7 +30,11 @@ class RecommendationService:
     - Warm-start recommendations (interaction-based)
     - Multi-factor scoring
     - Ground truth validation
-    - Bias mitigation via configurable slice rules
+    - Dual bias mitigation:
+      1. User-profile-based: Boosts scores for users in underperforming slices
+         (domain/stage/level) via bias_mitigation_config.json
+      2. Paper-field-based: Boosts papers from under-served research fields
+         via fairness_config.json and fairness_service
     """
     
     # Default scoring weights (tunable hyperparameters)
@@ -108,10 +113,29 @@ class RecommendationService:
             logger.warning(f"Failed to load bias mitigation config: {e}")
             return {}
 
-    def _get_mitigation_policy_for_profile(self, profile: Dict) -> Dict:
+    def _get_mitigation_policy_for_profile(self, profile: Dict, model: str = 'minilm', is_cold_start: bool = True) -> Dict:
         """
         Compute mitigation policy for this user from bias_config.
+        
+        Config structure expected:
+        {
+          "cold_start": {
+            "minilm": {
+              "primary_domain": {
+                "underperforming_slices": ["fintech"],
+                "boost_factor": 1.25,
+                "min_score_floor": 0.252
+              },
+              ...
+            }
+          }
+        }
 
+        Args:
+            profile: User profile dict
+            model: Model name ('minilm' or 'specter')
+            is_cold_start: Whether this is cold-start mode
+            
         Returns:
             {
               "factor": float,
@@ -131,43 +155,76 @@ class RecommendationService:
             return policy
 
         cfg = self.bias_config
-        slice_rules = cfg.get("slice_rules", {})
-
-        # Global default threshold if provided
-        global_th = cfg.get("global_min_score_threshold")
-        if global_th is not None:
-            policy["min_score_threshold"] = float(global_th)
-
-        # For each slicing field, see if this profile matches a rule
-        for field, field_rules in slice_rules.items():
+        
+        # Map model name to config key
+        model_key_map = {
+            'all-MiniLM-L6-v2': 'minilm',
+            'minilm': 'minilm',
+            'specter': 'specter',
+            'specter2': 'specter'
+        }
+        model_key = model_key_map.get(model, 'minilm')
+        
+        # Navigate to the correct config section
+        mode_key = "cold_start" if is_cold_start else "warm_start"
+        
+        if mode_key not in cfg:
+            return policy
+            
+        mode_cfg = cfg[mode_key]
+        if model_key not in mode_cfg:
+            return policy
+            
+        model_cfg = mode_cfg[model_key]
+        
+        # Fields to check (matching the slicing dimensions)
+        fields_to_check = ["primary_domain", "research_stage", "reading_level"]
+        
+        # For each field, check if user's value is in underperforming_slices
+        for field in fields_to_check:
             user_value = profile.get(field)
             if not user_value:
                 continue
-
-            rules_for_value = field_rules.get(user_value)
-            if not rules_for_value:
+                
+            # Get field config (e.g., model_cfg["primary_domain"])
+            field_cfg = model_cfg.get(field)
+            if not field_cfg:
                 continue
-
-            # 1) Score multiplier
-            sf = rules_for_value.get("score_factor")
-            if sf is not None:
-                policy["factor"] *= float(sf)
-
-            # 2) Per-component weight multipliers
-            for comp, mult in rules_for_value.get("weight_multipliers", {}).items():
-                current = policy["weight_multipliers"].get(comp, 1.0)
-                policy["weight_multipliers"][comp] = current * float(mult)
-
-            # 3) Threshold override – pick the most lenient (lowest)
-            if "min_score_threshold" in rules_for_value:
-                th = float(rules_for_value["min_score_threshold"])
+                
+            # Check if user's value is in underperforming_slices
+            underperforming_slices = field_cfg.get("underperforming_slices", [])
+            if user_value not in underperforming_slices:
+                continue
+            
+            # Apply mitigation for this field
+            boost_factor = field_cfg.get("boost_factor", 1.0)
+            min_score_floor = field_cfg.get("min_score_floor")
+            
+            # 1) Score multiplier (cumulative across multiple fields)
+            policy["factor"] *= float(boost_factor)
+            
+            # 2) Threshold - pick the most lenient (lowest) if multiple fields match
+            if min_score_floor is not None:
+                th = float(min_score_floor)
                 if policy["min_score_threshold"] is None:
                     policy["min_score_threshold"] = th
                 else:
                     policy["min_score_threshold"] = min(policy["min_score_threshold"], th)
-
-            policy["applied_rules"].append(
-                {"field": field, "value": user_value, "config": rules_for_value}
+            
+            # Track applied rule
+            policy["applied_rules"].append({
+                "field": field,
+                "value": user_value,
+                "boost_factor": boost_factor,
+                "min_score_floor": min_score_floor
+            })
+            
+            logger.debug(
+                "Applied bias mitigation",
+                field=field,
+                value=user_value,
+                boost_factor=boost_factor,
+                min_score_floor=min_score_floor
             )
 
         return policy
@@ -277,7 +334,11 @@ class RecommendationService:
         interests = await self.user_repo.get_user_interests(user_id)
 
         # NEW: compute mitigation policy for this user
-        mitigation_policy = self._get_mitigation_policy_for_profile(profile)
+        mitigation_policy = self._get_mitigation_policy_for_profile(
+            profile=profile,
+            model=model,
+            is_cold_start=True
+        )
         
         # Step 2: Get user embedding
         embeddings = await self.user_embedding_service.get_or_generate_user_embeddings(user_id)
@@ -372,16 +433,19 @@ class RecommendationService:
             user_interests=[i['interest_term'] for i in interests]
         )
         
+        # Step 8: Apply field-based fairness reranking (paper-level fairness)
+        fairness_reranked = self._apply_fairness_reranking(enriched)
+        
         logger.info(
             "Cold-start recommendations generated",
             user_id=user_id,
-            count=len(enriched),
-            avg_score=np.mean([p['final_score'] for p in enriched]) if enriched else 0.0
+            count=len(fairness_reranked),
+            avg_score=np.mean([p['final_score'] for p in fairness_reranked]) if fairness_reranked else 0.0
         )
         
         return {
             'user_id': user_id,
-            'papers': enriched,
+            'papers': fairness_reranked,
             'method': 'cold_start',
             'model_used': model,
             'scoring_weights': weights,
@@ -424,7 +488,11 @@ class RecommendationService:
         profile = await self.user_repo.get_profile(user_id)
 
         # NEW: mitigation policy for warm-start users too
-        mitigation_policy = self._get_mitigation_policy_for_profile(profile)
+        mitigation_policy = self._get_mitigation_policy_for_profile(
+            profile=profile,
+            model=model,
+            is_cold_start=False
+        )
         
         # Get user's interaction history
         saved_papers = await self._get_user_saved_papers(user_id)
@@ -511,15 +579,18 @@ class RecommendationService:
             user_interests=None
         )
         
+        # Apply field-based fairness reranking (paper-level fairness)
+        fairness_reranked = self._apply_fairness_reranking(enriched)
+        
         logger.info(
             "Warm-start recommendations generated",
             user_id=user_id,
-            count=len(enriched)
+            count=len(fairness_reranked)
         )
         
         return {
             'user_id': user_id,
-            'papers': enriched,
+            'papers': fairness_reranked,
             'method': 'warm_start',
             'model_used': model,
             'scoring_weights': weights,
@@ -783,18 +854,21 @@ class RecommendationService:
             user_interests=[i['interest_term'] for i in interests]
         )
         
+        # Apply field-based fairness reranking (paper-level fairness)
+        fairness_reranked = self._apply_fairness_reranking(enriched)
+        
         logger.info(
             "Search-augmented recommendations generated",
             user_id=user_id,
             search_query=search_query[:50],
-            count=len(enriched),
-            avg_score=np.mean([p['final_score'] for p in enriched]) if enriched else 0,
-            sample_explanation=enriched[0].get('relevance_explanation') if enriched else None
+            count=len(fairness_reranked),
+            avg_score=np.mean([p['final_score'] for p in fairness_reranked]) if fairness_reranked else 0,
+            sample_explanation=fairness_reranked[0].get('relevance_explanation') if fairness_reranked else None
         )
         
         return {
             'user_id': user_id,
-            'papers': enriched,
+            'papers': fairness_reranked,
             'method': 'search_augmented',
             'search_query': search_query,
             'model_used': model,
@@ -1916,6 +1990,92 @@ class RecommendationService:
         
         return selected
     
+    def _apply_fairness_reranking(self, papers: List[Dict]) -> List[Dict]:
+        """
+        Apply field-based fairness reranking to boost under-served research fields.
+        
+        This complements user-profile-based bias mitigation by also ensuring
+        papers from under-served fields get fair representation.
+        
+        Args:
+            papers: List of enriched recommendation papers
+            
+        Returns:
+            Reranked papers with updated scores and primary_field metadata
+        """
+        if not papers:
+            return papers
+        
+        # Create mapping from paper_id to original paper for merging
+        paper_map = {}
+        fairness_input = []
+        
+        for paper in papers:
+            paper_id = paper.get('paper_id') or paper.get('paperId')
+            score = paper.get('final_score') or paper.get('relevance_score') or paper.get('score', 0.0)
+            
+            if paper_id:
+                paper_id_str = str(paper_id)
+                paper_map[paper_id_str] = paper
+                fairness_input.append({
+                    'paper_id': paper_id_str,
+                    'score': float(score)
+                })
+        
+        if not fairness_input:
+            return papers
+        
+        # Apply fairness reranking
+        try:
+            reranked = fairness_aware_rerank(fairness_input, boost=1.05)
+            
+            # Map back to original format, updating scores and adding primary_field
+            result = []
+            for reranked_paper in reranked:
+                paper_id = reranked_paper.get('paper_id') or reranked_paper.get('paperId')
+                paper_id_str = str(paper_id) if paper_id else None
+                
+                # Get original paper
+                original = paper_map.get(paper_id_str, {})
+                if not original:
+                    # If paper not found in map, use reranked paper as base
+                    original = reranked_paper.copy()
+                    # Remove keys that shouldn't be in final output
+                    original.pop('_original', None)
+                
+                updated_paper = original.copy()
+                
+                # Update final_score with fairness-boosted score
+                new_score = reranked_paper.get('score', original.get('final_score', 0.0))
+                updated_paper['final_score'] = new_score
+                updated_paper['relevance_score'] = round(new_score, 3)
+                
+                # Add primary_field if available
+                if 'primary_field' in reranked_paper:
+                    updated_paper['primary_field'] = reranked_paper['primary_field']
+                
+                result.append(updated_paper)
+            
+            # Sort by final_score (fairness_aware_rerank already sorts, but ensure consistency)
+            result.sort(key=lambda x: x.get('final_score', 0.0), reverse=True)
+            
+            if result:
+                logger.debug(
+                    "Applied fairness reranking",
+                    papers_reranked=len(result),
+                    avg_score_after=np.mean([p['final_score'] for p in result])
+                )
+            
+            return result
+            
+        except Exception as e:
+            logger.warning(
+                f"Failed to apply fairness reranking: {e}",
+                exc_info=True
+            )
+            # Return original papers if fairness reranking fails
+            return papers
+    
     def _enrich_recommendations(
         self,
         papers: List[Dict],
@@ -2017,3 +2177,4 @@ class RecommendationService:
         )
         
         return filtered
+

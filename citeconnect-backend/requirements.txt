@@ -51,6 +51,7 @@ peft==0.13.2
 huggingface-hub==0.26.2
 tokenizers==0.20.3
 safetensors==0.4.5
+pyarrow>=14.0.0  # Required by datasets library (used by sentence-transformers)
 
 # DO NOT add 'adapters' - it conflicts with transformers versions
 # DO NOT pin transformers version - let sentence-transformers manage it
