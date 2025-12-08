@@ -367,6 +367,21 @@ async def root():
         "health": "/health"
     }
 
+@app.get("/debug/models")
+async def debug_models():
+    import os
+    return {
+        "env_vars": {
+            "TRANSFORMERS_CACHE": os.getenv("TRANSFORMERS_CACHE"),
+            "SENTENCE_TRANSFORMERS_HOME": os.getenv("SENTENCE_TRANSFORMERS_HOME"),
+            "HF_HOME": os.getenv("HF_HOME")
+        },
+        "paths_exist": {
+            "/app/models": os.path.exists("/app/models"),
+            "/root/.cache": os.path.exists("/root/.cache"),
+        },
+        "app_models_contents": os.listdir("/app/models") if os.path.exists("/app/models") else "NOT_FOUND"
+    }
 
 # Import and include routers
 from app.api.v1 import graph, recommendations, users, papers, interactions
