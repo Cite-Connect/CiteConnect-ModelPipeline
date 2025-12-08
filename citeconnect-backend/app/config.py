@@ -132,7 +132,7 @@ class Settings(BaseSettings):
 
     # Graph Generation Settings
     GRAPH_SEMANTIC_MIN_SIMILARITY: float = Field(
-        default=0.5,
+        default=0.6,
         env="GRAPH_SEMANTIC_MIN_SIMILARITY",
         description="Minimum cosine similarity threshold for semantic matching (0-1)"
     )

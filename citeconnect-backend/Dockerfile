@@ -22,6 +22,20 @@ COPY . .
 # Create directories for models and logs
 RUN mkdir -p /app/models /app/logs
 
+# Set model cache environment variables
+ENV TRANSFORMERS_CACHE=/app/models
+ENV SENTENCE_TRANSFORMERS_HOME=/app/models
+ENV HF_HOME=/app/models
+
+# Copy the download script
+COPY download_models.py .
+
+# Run the download script
+RUN python3 download_models.py && rm download_models.py
+
+# Verify models directory
+RUN ls -la /app/models/ && du -sh /app/models/
+
 # Expose port
 EXPOSE 8000
 

@@ -792,3 +792,38 @@ class UserRepository(BaseRepository):
                 new_stage,
                 user_id
             )
+
+    async def find_by_id(self, user_id: int) -> Optional[asyncpg.Record]:
+        """
+        Find user by user_id.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Optional[Record]: User record or None
+        """
+        logger.debug("Finding user by ID", user_id=user_id)
+        
+        query = """
+            SELECT user_id, email, name, is_active, created_at, updated_at
+            FROM users
+            WHERE user_id = $1
+        """
+        
+        try:
+            result = await self.db.fetchrow(query, user_id)
+            logger.debug(
+                "User ID lookup complete",
+                user_id=user_id,
+                found=result is not None
+            )
+            return result
+        except Exception as e:
+            logger.error(
+                "User ID lookup failed",
+                user_id=user_id,
+                error=str(e),
+                exc_info=True
+            )
+            raise        

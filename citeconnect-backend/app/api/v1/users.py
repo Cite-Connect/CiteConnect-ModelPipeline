@@ -1,12 +1,12 @@
 """
 User management API endpoints.
 Handles user registration, profile management, and authentication.
-UPDATED: Matches Supabase schema with interests in separate table.
+UPDATED: Added JWT authentication to protected endpoints.
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from typing import Optional
 from pydantic import BaseModel, EmailStr, Field, validator
-from passlib.context import CryptContext
+import bcrypt
 from datetime import datetime, timedelta
 from jose import JWTError, jwt
 
@@ -15,20 +15,20 @@ from app.utils.logger import get_logger
 from app.db.connection import get_db, DatabaseConnection
 from app.db.repositories.user_repo import UserRepository
 from app.services.user_embedding_service import UserEmbeddingService
-
+from app.api.v1.auth import get_current_user  # NEW
 logger = get_logger(__name__)
 
 router = APIRouter()
 
 # Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
 # Pydantic models
 class UserCreate(BaseModel):
     """User registration request."""
     email: EmailStr
-    password: str = Field(..., min_length=8, max_length=72)  # Max 72 for bcrypt
+    password: str = Field(..., min_length=8, max_length=72)
     full_name: Optional[str] = Field(None, max_length=100)
     
     @validator('password')
@@ -44,21 +44,16 @@ class UserCreate(BaseModel):
 
 
 class UserProfileCreate(BaseModel):
-    """
-    User profile creation request.
-    NOTE: Interests are stored in separate user_interest_hierarchy table.
-    """
-    # Required fields
+    """User profile creation request."""
     primary_domain: str = Field(..., description="Primary research domain")
     reading_level: str = Field(..., description="Reading level")
     interests: list[str] = Field(
         ..., 
         min_items=3, 
         max_items=10, 
-        description="Research interests (stored in user_interest_hierarchy table)"
+        description="Research interests"
     )
     
-    # Optional profile fields
     research_stage: Optional[str] = None
     sub_domains: Optional[list[str]] = Field(None, max_items=5)
     research_methods: Optional[list[str]] = None
@@ -67,12 +62,10 @@ class UserProfileCreate(BaseModel):
     years_experience: Optional[int] = Field(None, ge=0, le=50)
     h_index: Optional[int] = Field(None, ge=0)
     
-    # Preference flags
     prefers_recent_papers: bool = True
     prefers_high_impact: bool = False
     prefers_open_access: bool = True
     
-    # Optional metadata
     preferred_venues: Optional[list[str]] = None
     institution: Optional[str] = Field(None, max_length=200)
     department: Optional[str] = Field(None, max_length=200)
@@ -92,8 +85,7 @@ class UserProfileCreate(BaseModel):
     def validate_domain(cls, v):
         if v not in settings.ALLOWED_DOMAINS:
             raise ValueError(
-                f"Domain must be one of {settings.ALLOWED_DOMAINS}. "
-                f"Currently supported: healthcare, fintech, quantum_computing"
+                f"Domain must be one of {settings.ALLOWED_DOMAINS}"
             )
         return v
     
@@ -156,26 +148,23 @@ class TokenData(BaseModel):
 
 
 def get_user_repo(db: DatabaseConnection = Depends(get_db)) -> UserRepository:
-    """
-    Dependency to get user repository.
-    
-    Args:
-        db: Database connection
-        
-    Returns:
-        UserRepository: User repository instance
-    """
+    """Dependency to get user repository."""
     return UserRepository(db)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify password against hash."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify password against hash using bcrypt directly."""
+    return bcrypt.checkpw(
+        plain_password.encode('utf-8'),
+        hashed_password.encode('utf-8')
+    )
 
 
 def get_password_hash(password: str) -> str:
-    """Hash password."""
-    return pwd_context.hash(password)
+    """Hash password using bcrypt directly."""
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
+    return hashed.decode('utf-8')
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
@@ -296,7 +285,6 @@ async def register_user(
 
 @router.post(
     "/login",
-    response_model=Token,
     summary="User login",
     description="Authenticate user and get access token"
 )
@@ -360,7 +348,6 @@ async def login(
         
         return {
             "access_token": access_token,
-            "token_type": "bearer",
             "user_id": user['user_id']
         }
         
@@ -382,36 +369,66 @@ async def login(
 
 
 @router.post(
+    "/logout",
+    status_code=status.HTTP_200_OK,
+    summary="User logout",
+    description="Logout user (client-side token invalidation)"
+)
+async def logout(
+    current_user: dict = Depends(get_current_user)
+):
+    """
+    Logout user.
+    
+    Note: With JWT, logout is primarily client-side (delete token).
+    This endpoint validates the token and logs the logout event.
+    For true server-side invalidation, implement token blacklisting.
+    
+    Args:
+        current_user: Authenticated user from token
+        
+    Returns:
+        Logout confirmation
+    """
+    logger.info(
+        "User logout",
+        user_id=current_user['user_id'],
+        email=current_user['email']
+    )
+    
+    return {
+        "message": "Logged out successfully",
+        "user_id": current_user['user_id']
+    }
+
+
+@router.post(
     "/{user_id}/profile",
     status_code=status.HTTP_201_CREATED,
     summary="Create user profile",
-    description="""
-    Create extended user profile for personalized recommendations.
-    
-    **Note:** Interests are stored in a separate hierarchical table (user_interest_hierarchy).
-    The API accepts interests as a simple array, but they're stored with:
-    - interest_level: 1 (broad), 2 (specific), 3 (narrow)
-    - confidence_score: 1.0 for explicit user input
-    - source: 'explicit' for user-provided interests
-    """
+    description="Create extended user profile. **Requires authentication.**"
 )
 async def create_profile(
     user_id: int,
     profile_data: UserProfileCreate,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     user_repo: UserRepository = Depends(get_user_repo),
     db: DatabaseConnection = Depends(get_db)
-    ):
-    """
-    Create user profile.
+):
+    """Create user profile."""
     
-    Args:
-        user_id: User identifier
-        profile_data: Profile data
-        user_repo: User repository
-        
-    Returns:
-        Created profile with interests included
-    """
+    # Verify user is creating their own profile
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized profile creation attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only create your own profile"
+        )
+    
     logger.info(
         "Profile creation request",
         user_id=user_id,
@@ -421,20 +438,15 @@ async def create_profile(
     )
     
     try:
-        # Check if profile exists
         existing_profile = await user_repo.get_profile(user_id)
         
         if existing_profile:
-            logger.warning(
-                "Profile already exists",
-                user_id=user_id
-            )
+            logger.warning("Profile already exists", user_id=user_id)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Profile already exists. Use PUT to update."
             )
         
-        # Create profile (interests will be saved to hierarchy table automatically)
         profile = await user_repo.create_profile(
             user_id,
             profile_data.dict()
@@ -447,7 +459,6 @@ async def create_profile(
             interest_count=len(profile.get('interests', {}).get('all', []))
         )
         
-        #Generate user embeddings after profile creation
         try:
             user_embedding_service = UserEmbeddingService(db)
             embeddings = await user_embedding_service.get_or_generate_user_embeddings(user_id)
@@ -459,14 +470,12 @@ async def create_profile(
                 specter_dim=len(embeddings['specter'])
             )
         except Exception as emb_error:
-            # Log error but don't fail profile creation
             logger.error(
                 "Embedding generation failed, but profile created",
                 user_id=user_id,
                 error=str(emb_error),
                 exc_info=True
             )
-
 
         return {
             "user_id": user_id,
@@ -494,22 +503,27 @@ async def create_profile(
 @router.get(
     "/{user_id}/profile",
     summary="Get user profile",
-    description="Retrieve user's extended profile with interests from hierarchy table"
+    description="Retrieve user's extended profile. **Requires authentication.**"
 )
 async def get_profile(
     user_id: int,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     user_repo: UserRepository = Depends(get_user_repo)
 ):
-    """
-    Get user profile.
+    """Get user profile."""
     
-    Args:
-        user_id: User identifier
-        user_repo: User repository
-        
-    Returns:
-        User profile with interests structured by level
-    """
+    # Verify user is accessing their own profile
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized profile access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own profile"
+        )
+    
     logger.debug("Profile retrieval request", user_id=user_id)
     
     try:
@@ -553,29 +567,28 @@ async def get_profile(
 @router.put(
     "/{user_id}/profile",
     summary="Update user profile",
-    description="""
-    Update user's extended profile.
-    
-    **Note:** Updating interests will replace all existing explicit interests.
-    Inferred interests (if any) are preserved.
-    """
+    description="Update user's extended profile. **Requires authentication.**"
 )
 async def update_profile(
     user_id: int,
     updates: UserProfileUpdate,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     user_repo: UserRepository = Depends(get_user_repo)
 ):
-    """
-    Update user profile.
+    """Update user profile."""
     
-    Args:
-        user_id: User identifier
-        updates: Profile updates
-        user_repo: User repository
-        
-    Returns:
-        Updated profile with interests
-    """
+    # Verify user is updating their own profile
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized profile update attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only update your own profile"
+        )
+    
     logger.info(
         "Profile update request",
         user_id=user_id,
@@ -583,7 +596,6 @@ async def update_profile(
     )
     
     try:
-        # Only update provided fields
         update_data = updates.dict(exclude_unset=True)
         
         if not update_data:
@@ -592,11 +604,7 @@ async def update_profile(
                 detail="No fields to update"
             )
         
-        # Update profile (handles interests separately)
-        profile = await user_repo.update_profile(
-            user_id,
-            update_data
-        )
+        profile = await user_repo.update_profile(user_id, update_data)
         
         if not profile:
             logger.warning("Profile not found for update", user_id=user_id)
@@ -637,28 +645,32 @@ async def update_profile(
 @router.get(
     "/{user_id}/interests",
     summary="Get user interests",
-    description="Get user's interest hierarchy with levels and confidence scores"
+    description="Get user's interest hierarchy. **Requires authentication.**"
 )
 async def get_user_interests(
     user_id: int,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     user_repo: UserRepository = Depends(get_user_repo)
 ):
-    """
-    Get user's interest hierarchy.
+    """Get user's interest hierarchy."""
     
-    Args:
-        user_id: User identifier
-        user_repo: User repository
-        
-    Returns:
-        Interest hierarchy
-    """
+    # Verify user is accessing their own interests
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized interests access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own interests"
+        )
+    
     logger.debug("Interests retrieval request", user_id=user_id)
     
     try:
         interests = await user_repo.get_user_interests(user_id)
         
-        # Group by level
         by_level = {
             'level_1': [],
             'level_2': [],
@@ -702,22 +714,27 @@ async def get_user_interests(
 @router.get(
     "/{user_id}/state",
     summary="Get user recommendation state",
-    description="Get user's current recommendation stage and statistics"
+    description="Get user's current recommendation stage. **Requires authentication.**"
 )
 async def get_user_state(
     user_id: int,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     user_repo: UserRepository = Depends(get_user_repo)
 ):
-    """
-    Get user recommendation state.
+    """Get user recommendation state."""
     
-    Args:
-        user_id: User identifier
-        user_repo: User repository
-        
-    Returns:
-        User state information
-    """
+    # Verify user is accessing their own state
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized state access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own state"
+        )
+    
     logger.debug("State retrieval request", user_id=user_id)
     
     try:

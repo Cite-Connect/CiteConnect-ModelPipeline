@@ -38,6 +38,7 @@ class GraphEdge(BaseModel):
     type: str
     strength: float
     label: str
+    distance: Optional[int] = 100  # NEW: Visual distance for layout
 
 
 class GraphStats(BaseModel):

@@ -1,194 +1,100 @@
-# app/api/v1/auth.py
-
 """
-Authentication API Endpoints
-
-This module provides API endpoints for authentication:
-- POST /auth/register - User registration
-- POST /auth/login - User login
-- POST /auth/refresh - Token refresh
-
-All endpoints are public (no authentication required).
+Authentication dependencies for protected endpoints.
 """
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt
+from typing import Optional
 
-import logging
-from fastapi import APIRouter, HTTPException, status
+from app.config import settings
+from app.utils.logger import get_logger
+from app.db.connection import get_db, DatabaseConnection
+from app.db.repositories.user_repo import UserRepository
 
-from app.schemas.auth import (
-    LoginRequest,
-    RegisterRequest,
-    TokenResponse,
-    RefreshTokenRequest,
-    TokenRefreshResponse
-)
-from app.services.auth_service import register_user, login_user, refresh_access_token
-from app.core.exceptions import AuthenticationError, ValidationError, DatabaseError
+logger = get_logger(__name__)
 
-# Initialize logger
-logger = logging.getLogger(__name__)
-
-# Create router
-router = APIRouter()
+security = HTTPBearer()
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(request: RegisterRequest):
+async def get_current_user(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+    db: DatabaseConnection = Depends(get_db)
+) -> dict:
     """
-    Register a new user.
+    Validate JWT token and return current user.
     
-    Creates a new user account with domain selection and research interests.
-    Triggers async generation of personalized starter kit (3 paper clusters).
-    
-    Request Body:
-        - email: User's email address
-        - password: Password (min 8 chars, must have digit, uppercase, lowercase)
-        - name: Full name
-        - domain: Research domain (healthcare, fintech, quantum_computing)
-        - interests: 1-10 research keywords
-        - google_scholar_url: Optional Google Scholar profile
-        - uploaded_paper_file: Optional base64 encoded PDF
-    
+    Args:
+        credentials: HTTP Bearer token
+        db: Database connection
+        
     Returns:
-        User profile with authentication tokens
-    
+        User data dictionary
+        
     Raises:
-        400: Validation error (invalid input)
-        409: Email already registered
-        500: Server error
+        HTTPException: If token is invalid or user not found
     """
-    logger.info(
-        f"Registration request received",
-        extra={"email": request.email, "domain": request.domain}
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
     )
     
     try:
-        user_data = await register_user(
-            email=request.email,
-            password=request.password,
-            name=request.name,
-            domain=request.domain,
-            interests=request.interests,
-            google_scholar_url=request.google_scholar_url,
-            uploaded_paper_file=request.uploaded_paper_file
+        token = credentials.credentials
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM]
         )
         
-        logger.info(
-            f"User registered successfully",
-            extra={"user_id": user_data['user_id'], "email": request.email}
-        )
+        user_id: int = payload.get("user_id")
+        email: str = payload.get("email")
         
-        return user_data
-        
-    except ValidationError as e:
-        logger.warning(f"Registration validation error: {e.message}")
+        if user_id is None or email is None:
+            logger.warning("Invalid token payload")
+            raise credentials_exception
+            
+    except JWTError as e:
+        logger.warning(f"JWT validation failed: {str(e)}")
+        raise credentials_exception
+    
+    # Verify user exists and is active
+    user_repo = UserRepository(db)
+    user = await user_repo.find_by_id(user_id)
+    
+    if user is None:
+        logger.warning(f"User not found: {user_id}")
+        raise credentials_exception
+    
+    if not user.get('is_active', False):
+        logger.warning(f"Inactive user attempted access: {user_id}")
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=e.message
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account is inactive"
         )
+    
+    return user
+
+
+async def get_current_user_optional(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(HTTPBearer(auto_error=False)),
+    db: DatabaseConnection = Depends(get_db)
+) -> Optional[dict]:
+    """
+    Optional authentication - returns user if token provided, None otherwise.
+    Useful for endpoints that work differently for authenticated vs anonymous users.
+    
+    Args:
+        credentials: Optional HTTP Bearer token
+        db: Database connection
         
-    except DatabaseError as e:
-        if "already registered" in e.message.lower():
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=e.message
-            )
-        else:
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=e.message
-            )
-
-
-@router.post("/login", response_model=TokenResponse)
-async def login(request: LoginRequest):
-    """
-    Login user and generate tokens.
-    
-    Authenticates user credentials and returns JWT tokens.
-    
-    Request Body:
-        - email: User's email address
-        - password: User's password
-    
     Returns:
-        User profile with authentication tokens
-    
-    Raises:
-        401: Invalid credentials
-        500: Server error
+        User data dictionary or None
     """
-    logger.info(f"Login request received for email: {request.email}")
+    if credentials is None:
+        return None
     
     try:
-        user_data = await login_user(
-            email=request.email,
-            password=request.password
-        )
-        
-        logger.info(
-            f"User logged in successfully",
-            extra={"user_id": user_data['user_id'], "email": request.email}
-        )
-        
-        return user_data
-        
-    except AuthenticationError as e:
-        logger.warning(f"Login failed: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=e.message,
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-        
-    except Exception as e:
-        logger.error(f"Login error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Login failed"
-        )
-
-
-@router.post("/refresh", response_model=TokenRefreshResponse)
-async def refresh_token(request: RefreshTokenRequest):
-    """
-    Refresh access token.
-    
-    Exchanges a valid refresh token for a new access token.
-    
-    Request Body:
-        - refresh_token: JWT refresh token
-    
-    Returns:
-        New access token
-    
-    Raises:
-        401: Invalid or expired refresh token
-        500: Server error
-    """
-    logger.info("Token refresh request received")
-    
-    try:
-        token_data = await refresh_access_token(request.refresh_token)
-        
-        logger.info("Token refreshed successfully")
-        
-        return token_data
-        
-    except AuthenticationError as e:
-        logger.warning(f"Token refresh failed: {e.message}")
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=e.message,
-            headers={"WWW-Authenticate": "Bearer"}
-        )
-        
-    except Exception as e:
-        logger.error(f"Token refresh error: {str(e)}", exc_info=True)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Token refresh failed"
-        )
-
-
-# Initialize module logger
-logger.info("Auth API endpoints loaded successfully")
+        return await get_current_user(credentials, db)
+    except HTTPException:
+        return None
