@@ -37,8 +37,7 @@ flower==2.0.1
 # CRITICAL: Specific versions to avoid conflicts
 # The key is to let transformers be pulled by sentence-transformers
 # ============================================================================
-sentence-transformers>=2.2.2,<3.0.0
-transformers>=4.32.0,<5.0.0
+sentence-transformers==2.2.2
 # transformers will be auto-installed by sentence-transformers (>=4.34.0,<5.0.0)
 torch==2.9.1
 torchvision==0.24.1
@@ -49,7 +48,7 @@ scikit-learn==1.5.2
 peft>=0.6.0,<0.8.0
 
 # Supporting ML libraries
-huggingface_hub>=0.19.0,<0.20.0
+huggingface-hub==0.26.2
 tokenizers==0.20.3
 safetensors==0.4.5
 
