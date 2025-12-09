@@ -73,8 +73,8 @@ jobs:
   
   bias-detection:
     runs-on: ubuntu-latest
-    needs: test  # Run after tests pass
-    continue-on-error: true  # Non-blocking - won't fail CI
+    needs: test
+    continue-on-error: true
     
     defaults:
       run:
@@ -106,11 +106,9 @@ jobs:
         
         python scripts/bias_slicing_cold_start.py
         
-        # Check if bias report was generated
         if [ -f "bias_report_cold_start_before.json" ]; then
           echo "✅ User bias report generated"
           
-          # Extract max disparity using Python
           MAX_DISPARITY=$(python -c "
 import json
 import sys
@@ -163,7 +161,6 @@ except Exception as e:
         if [ -f "model_bias_report.json" ]; then
           echo "✅ Field bias report generated"
           
-          # Extract field fairness ratio using inline Python
           FIELD_RATIO=$(python -c "import json; data=json.load(open('model_bias_report.json')); fairness=data.get('fairness_summary',{}); ratio=fairness.get('precision_ratio_min_over_max',1.0) or 1.0; print(f'{ratio:.4f}')" 2>/dev/null || echo "1.0000")
           
           echo "field_fairness_ratio=$FIELD_RATIO" >> $GITHUB_OUTPUT
@@ -196,7 +193,6 @@ except Exception as e:
         echo "============================================================"
         echo ""
         
-        # Check user-profile bias
         if (( $(echo "$MAX_DISPARITY >= $CRITICAL_THRESHOLD" | bc -l) )); then
           echo "🚨 USER-PROFILE BIAS: CRITICAL!"
           echo "   Disparity ${MAX_DISPARITY} >= ${CRITICAL_THRESHOLD}"
@@ -220,7 +216,6 @@ except Exception as e:
         
         echo ""
         
-        # Check field-level fairness
         if (( $(echo "$FIELD_RATIO < $FIELD_THRESHOLD" | bc -l) )); then
           echo "⚠️  FIELD-LEVEL FAIRNESS: WARNING"
           echo "   Best/Worst field ratio: ${FIELD_RATIO}"
@@ -270,15 +265,15 @@ except Exception as e:
           }
           
           const body = `## ${emoji} Bias Detection ${status}
-          
+
 ### 👥 User-Profile Bias
 ${color} **Max Disparity Detected:** ${(disparity * 100).toFixed(2)}%
 
 ${disparity >= criticalThreshold ? 
-  '🚨 **Critical bias levels detected!** This would block deployment in production.' : 
-  disparity >= alertThreshold ?
-  '⚠️ **Elevated bias detected** - monitoring recommended.' :
-  '✅ **User-profile bias within acceptable limits.**'}
+'🚨 **Critical bias levels detected!** This would block deployment in production.' : 
+disparity >= alertThreshold ?
+'⚠️ **Elevated bias detected** - monitoring recommended.' :
+'✅ **User-profile bias within acceptable limits.**'}
 ${fieldSection}
 ### What This Means
 - **User-profile bias:** Disparities between user groups (domain, research stage, reading level)
@@ -297,7 +292,7 @@ ${fieldSection}
 5. 🔄 Re-run evaluation after applying fixes
 
 ---
-⚙️ *This is currently non-blocking and won't prevent merging.*
+⚙️ *This is currently non-blocking and will not prevent merging.*
 `;
           
           github.rest.issues.createComment({
