@@ -22,22 +22,41 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Set up Python ${{ matrix.python-version }}
+    - name: Debug - List files to find requirements.txt
+      run: |
+        echo "=== Repository structure ==="
+        ls -la
+        echo ""
+        echo "=== Looking for requirements files ==="
+        find . -name "requirements*.txt" -type f
+        echo ""
+        echo "=== Current directory ==="
+        pwd
+
+
+    - name: Set up Python 3.11
       uses: actions/setup-python@v5
       with:
-        python-version: ${{ matrix.python-version }}
-        cache: 'pip'
-        cache-dependency-path: |
-          citeconnect-backend/requirements.txt
-          requirements-dev.txt
+        python-version: '3.11'
 
     - name: Install dependencies
-      working-directory: .
       run: |
+        echo "=== Installing from citeconnect-backend/requirements.txt ==="
         python -m pip install --upgrade pip
-        pip install -r citeconnect-backend/requirements.txt
-        if [ -f requirements-dev.txt ]; then
+        
+        if [ -f "citeconnect-backend/requirements.txt" ]; then
+          echo "✓ Found citeconnect-backend/requirements.txt"
+          pip install -r citeconnect-backend/requirements.txt
+        else
+          echo "✗ citeconnect-backend/requirements.txt NOT FOUND"
+          exit 1
+        fi
+        
+        if [ -f "requirements-dev.txt" ]; then
+          echo "✓ Found requirements-dev.txt"
           pip install -r requirements-dev.txt
+        else
+          echo "⚠ requirements-dev.txt not found, skipping"
         fi
 
     - name: Run all tests from tests folder
