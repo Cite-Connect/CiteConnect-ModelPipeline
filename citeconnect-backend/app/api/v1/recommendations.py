@@ -85,12 +85,23 @@ async def get_recommendations(
         model_name = model_map.get(request_data.model_preference, request_data.model_preference)
 
         # Generate recommendations (with optional search)
+        logger.info(
+            "Calling orchestrator",
+            user_id=request_data.user_id,
+            search_query=request_data.search_query,
+            search_query_type=type(request_data.search_query).__name__
+        )
         result = await orchestrator.generate_recommendations(
             user_id=request_data.user_id,
             model_name=model_name,
             count=request_data.count,
             search_query=request_data.search_query,  # ← NEW: Pass search query
             filters=request_data.filters.dict() if request_data.filters else None
+        )
+        logger.info(
+            "Orchestrator returned",
+            search_query_in_metadata=result.get('metadata', {}).get('search_query'),
+            strategy=result.get('metadata', {}).get('strategy_used')
         )
         
         logger.info(

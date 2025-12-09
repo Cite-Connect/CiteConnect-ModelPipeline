@@ -32,6 +32,15 @@ def test_search_augmented():
         print(f"✅ Papers returned: {len(result['recommendations'])}")
         print(f"✅ Strategy: {result['metadata']['strategy_used']}")
         print(f"✅ Search query: {result['metadata'].get('search_query')}")
+        
+        # Show LLM refinement info if available
+        if result['metadata'].get('llm_refinement_used'):
+            print(f"✅ LLM Refinement: YES")
+            print(f"✅ Original query: {result['metadata'].get('search_query')}")
+            print(f"✅ Refined query: {result['metadata'].get('refined_query')}")
+        else:
+            print(f"✅ LLM Refinement: NO (using original query)")
+        
         print(f"✅ Time: {result['metadata']['generation_time_ms']:.0f}ms")
         
         print("\nTop 3 Papers:")
