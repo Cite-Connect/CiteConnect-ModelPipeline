@@ -109,22 +109,7 @@ jobs:
         if [ -f "bias_report_cold_start_before.json" ]; then
           echo "✅ User bias report generated"
           
-          MAX_DISPARITY=$(python -c "
-import json
-import sys
-try:
-    with open('bias_report_cold_start_before.json') as f:
-        data = json.load(f)
-    findings = data.get('bias_findings', [])
-    if findings:
-        max_d = max([f['disparity'] for f in findings])
-        print(f'{max_d:.4f}')
-    else:
-        print('0.0000')
-except Exception as e:
-    print('0.0000')
-    sys.stderr.write(f'Error: {e}\\n')
-")
+          MAX_DISPARITY=$(python -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); findings=data.get("bias_findings",[]); print(f"{max([f[\"disparity\"] for f in findings]):.4f}" if findings else "0.0000")' 2>/dev/null || echo "0.0000")
           
           echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
           echo ""
