@@ -37,19 +37,21 @@ flower==2.0.1
 # CRITICAL: Specific versions to avoid conflicts
 # The key is to let transformers be pulled by sentence-transformers
 # ============================================================================
-sentence-transformers>=3.3.1
+huggingface_hub
+sentence-transformers
+transformers
+tokenizers
+torch
+
 # transformers will be auto-installed by sentence-transformers (>=4.34.0,<5.0.0)
-torch==2.9.1
-torchvision==0.24.1
+torchvision
 numpy==1.26.4
 scikit-learn==1.5.2
 
 # PEFT is required for SPECTER2 model
-peft==0.13.2
+peft>=0.4.0
 
 # Supporting ML libraries
-huggingface-hub==0.26.2
-tokenizers==0.20.3
 safetensors==0.4.5
 pyarrow>=14.0.0  # Required by datasets library (used by sentence-transformers)
 

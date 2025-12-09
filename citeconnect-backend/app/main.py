@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError
 import time
-
+import os
 from app.config import settings
 from app.utils.logger import setup_logging, get_logger
 from app.db.connection import db
@@ -367,6 +367,20 @@ async def root():
         "health": "/health"
     }
 
+@app.get("/debug/embedding-service")
+async def debug_embedding_service():
+    import traceback
+    try:
+        from app.services.bootstrap.embedding_service import EmbeddingService
+        service = EmbeddingService()
+        
+        return {
+            "service_initialized": True,
+            "models_loaded": list(service.models.keys()),
+            "health_check": service.health_check()
+        }
+    except Exception as e:
+        return {"error": str(e), "traceback": traceback.format_exc()}
 
 # Import and include routers
 from app.api.v1 import graph, recommendations, users, papers, interactions
@@ -405,7 +419,7 @@ app.include_router(
 
 if __name__ == "__main__":
     import uvicorn
-    
+    port = int(os.getenv("DEPLOYMENT_PORT", 8000))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",

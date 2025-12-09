@@ -10,25 +10,27 @@ RUN apt-get update && apt-get install -y \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy requirements first (for better caching)
-COPY requirements.txt .
+# Copy requirements from citeconnect-backend directory
+COPY citeconnect-backend/requirements.txt .
+
+RUN pip install --upgrade pip
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY . .
-
-# Create directories for models and logs
-RUN mkdir -p /app/models /app/logs
+# Copy the contents of citeconnect-backend directly to /app (not as subdirectory)
+COPY citeconnect-backend/ .
 
 # Set model cache environment variables
 ENV TRANSFORMERS_CACHE=/app/models
 ENV SENTENCE_TRANSFORMERS_HOME=/app/models
 ENV HF_HOME=/app/models
 
-# Copy the download script
+# Copy download_models.py from root
 COPY download_models.py .
+
+# Create directories for models and logs
+RUN mkdir -p /app/models /app/logs
 
 # Run the download script
 RUN python3 download_models.py && rm download_models.py
@@ -44,9 +46,9 @@ ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/app
 
-# Health check with longer startup time for Cloud Run
+# Health check
 HEALTHCHECK --interval=30s --timeout=30s --start-period=120s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
-# Run application with more detailed logging
+# Now the module path is simply app.main:app (not citeconnect-backend.app.main:app)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--log-level", "info", "--access-log"]
