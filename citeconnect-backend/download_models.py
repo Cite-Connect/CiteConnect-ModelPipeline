@@ -21,7 +21,7 @@ except Exception as e:
 # Model 2: SPECTER
 try:
     print('📥 Downloading allenai/specter2_base...')
-    model2 = SentenceTransformer('allenai/specter2_base', cache_folder=cache_dir)
+    model2 = SentenceTransformer('allenai/specter', cache_folder=cache_dir)
     print('✅ specter2_base downloaded successfully')
     test_embedding2 = model2.encode('test', show_progress_bar=False)
     print(f'✅ SPECTER test passed - shape: {test_embedding2.shape}')

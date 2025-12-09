@@ -2,7 +2,7 @@
 
 ### Variables
 @baseUrl = http://localhost:8000/api/v1
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3MSwiZW1haWwiOiJzbW9oYW50eTE4QGdtYWlsLmNvbSIsImV4cCI6MTc2NTE1OTI2M30.8a2HArpofRIgOEF2z6-tK0Fz4G4ceTyNuzC6ZfcZaZs
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3MSwiZW1haWwiOiJzbW9oYW50eTE4QGdtYWlsLmNvbSIsImV4cCI6MTc2NTI0NTQ2NH0.dsEwqbYgqlEk1Cb1COIy-ABHjqcGudtnG58szrtKMHU
 @prodUrl = https://citeconnect-backend-api-897523647765.us-central1.run.app/api/v1
 
 ### Health Check
@@ -75,6 +75,24 @@ Content-Type: application/json
   "password": "Agent@123"
 }
 
+### User Login
+POST {{baseUrl}}/users/login
+Content-Type: application/json
+
+{
+  "email": "testuser1234@gmail.com",
+  "password": "Caruso@811"
+}
+
+# testuser1234@gmail.com
+# Caruso@811
+###
+POST {{baseUrl}}/users/73/profile
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"primary_domain":"Finance","reading_level":"Introductory","interests":["Finance"],"research_stage":"Master's Student"}
+
 ### 16. Logout User
 POST {{baseUrl}}/users/logout
 Authorization: Bearer {{token}}
@@ -103,17 +121,23 @@ Content-Type: application/json
   "limit": 10
 }
 
+
+
+
 ### Get Recommendations (requires paper data)
 POST {{baseUrl}}/recommendations
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
 {
-  "user_id": 2,
+  "user_id": 71,
   "count": 5,
-  "model_preference": "all-MiniLM-L6-v2",
-  "session_id": "test-session-x"
+  "model_preference": "specter",
+  "session_id": "test-session-"
 }
+
+
+
 
 ### Track Interaction
 POST {{baseUrl}}/interactions/1
@@ -181,21 +205,27 @@ Authorization: Bearer {{token}}
 ### Test with Other Papers from Recommendation Response
 ### ==============================================
 
-### 6. Citation Network - Second Paper
-GET {{baseUrl}}/api/v1/graph/citation-network/8470d8070b022c791639ef995b455621cf005379?depth=1&max_nodes=50
-Authorization: Bearer {{token}}
+### ==============================================
+### CITATION GRAPH WITH RECOMMENDATION CONTEXT
+### ==============================================
 
-###
+### 1. Graph with Recommendation Context (All 5 papers from your example)
+POST {{baseUrl}}/graph/citation-network/dc32a984b651256a8ec282be52310e6bd33d9815
+Content-Type: application/json
 
-### 7. Citation Network - Third Paper
-GET {{baseUrl}}/api/v1/graph/citation-network/75d03c3953e6c8f701f250a9ecb8aecc05c2e689?depth=1&max_nodes=50
-Authorization: Bearer {{token}}
+{
+  "depth": 2,
+  "max_nodes": 50,
+  "include_metadata": true,
+  "embedding_model": "specter",
+  "recommended_papers": [
+    "2fc7d040b64164126f0a56cf1562c7659bc2b146",
+    "c62de1db876c3c85963f0a1e53f8516d38c62953",
+    "9cac672bb24d6216c2b5728f940e69395d188bdd",
+    "163b4d6a79a5b19af88b8585456363340d9efd04"
+  ]
+}
 
-###
-
-### 8. Graph Summary - Second Paper
-GET {{baseUrl}}/api/v1/graph/summary/8470d8070b022c791639ef995b455621cf005379
-Authorization: Bearer {{token}}
 
 ###
 
@@ -213,42 +243,6 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b42ac69?depth=1&max_nodes=10
 Authorization: Bearer {{token}}
 
-###
-
-# ### ==============================================
-# ### Batch Summary Requests (For Recommendation Cards)
-# ### ==============================================
-
-# ### 11. Get summaries for all 5 recommended papers
-# ### Paper 1
-# GET {{baseUrl}}/api/v1/graph/summary/61827838932597591901992a4d3a86b71b42ac69
-# Authorization: Bearer {{token}}
-
-# ###
-
-# ### Paper 2
-# GET {{baseUrl}}/api/v1/graph/summary/8470d8070b022c791639ef995b455621cf005379
-# Authorization: Bearer {{token}}
-
-# ###
-
-# ### Paper 3
-# GET {{baseUrl}}/api/v1/graph/summary/75d03c3953e6c8f701f250a9ecb8aecc05c2e689
-# Authorization: Bearer {{token}}
-
-# ###
-
-# ### Paper 4
-# GET {{baseUrl}}/api/v1/graph/summary/3893783a815a5d46a26f154683115d4195b1b004
-# Authorization: Bearer {{token}}
-
-# ###
-
-# ### Paper 5
-# GET {{baseUrl}}/api/v1/graph/summary/5123717445799d8137327f4041e8d5a5a2c91379
-# Authorization: Bearer {{token}}
-
-###
 
 ### ==============================================
 ### Error Cases
@@ -276,3 +270,4 @@ GET {{baseUrl}}/api/v1/graph/citation-network/61827838932597591901992a4d3a86b71b
 Authorization: Bearer {{token}}
 
 ###
+GET {{baseUrl}}/papers/61827838932597591901992a4d3a86b71b42ac69

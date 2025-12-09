@@ -12,8 +12,40 @@ from app.db.repositories.user_repo import UserRepository
 import structlog
 from app.config import settings
 logger = structlog.get_logger()
+from typing import List
 
 router = APIRouter()
+
+
+# Request models
+class CitationGraphRequest(BaseModel):
+    """Request body for citation graph generation."""
+    depth: int = Field(
+        default=1,
+        ge=1,
+        le=2,
+        description="Graph depth: 1=direct connections, 2=connections between related papers"
+    )
+    max_nodes: int = Field(
+        default=50,
+        ge=10,
+        le=100,
+        description="Maximum number of nodes to include in graph"
+    )
+    include_metadata: bool = Field(
+        default=True,
+        description="Include full paper metadata in nodes"
+    )
+    embedding_model: Optional[str] = Field(
+        default=None,
+        pattern="^(minilm|specter)$",
+        description="Embedding model for semantic similarity: 'minilm' or 'specter' (default: from config)"
+    )
+    recommended_papers: Optional[List[str]] = Field(
+        default=None,
+        description="List of paper IDs from same recommendation batch (shows recommendation context)"
+    )
+
 
 # Response models
 class GraphNode(BaseModel):
@@ -38,7 +70,7 @@ class GraphEdge(BaseModel):
     type: str
     strength: float
     label: str
-    distance: Optional[int] = 100  # NEW: Visual distance for layout
+    distance: Optional[int] = 100
 
 
 class GraphStats(BaseModel):
@@ -59,7 +91,7 @@ class GraphMetadata(BaseModel):
     total_nodes: int
     total_edges: int
     has_semantic_fallback: Optional[bool] = False
-    embedding_model_used: Optional[str] = None  # NEW: Track which model was used
+    embedding_model_used: Optional[str] = None
 
 
 class CitationGraphResponse(BaseModel):
@@ -70,45 +102,14 @@ class CitationGraphResponse(BaseModel):
     metadata: GraphMetadata
 
 
-class GraphSummaryResponse(BaseModel):
-    """Quick summary of citation graph."""
-    paper_id: str
-    total_citations: int
-    total_references: Optional[int] = None
-    co_cited_papers: Optional[int] = None
-    bibliographic_couples: Optional[int] = None
-    network_centrality: Optional[float] = None
-    has_ground_truth: bool
-
-
-@router.get(
+@router.post(
     "/citation-network/{paper_id}",
     response_model=CitationGraphResponse,
     summary="Get citation network graph for a paper"
 )
 async def get_citation_network(
     paper_id: str,
-    depth: int = Query(
-        1,
-        ge=1,
-        le=2,
-        description="Graph depth: 1=direct connections, 2=connections between related papers"
-    ),
-    max_nodes: int = Query(
-        50,
-        ge=10,
-        le=100,
-        description="Maximum number of nodes to include in graph"
-    ),
-    include_metadata: bool = Query(
-        True,
-        description="Include full paper metadata in nodes"
-    ),
-    embedding_model: str = Query(
-        None,
-        regex="^(minilm|specter)$",
-        description="Embedding model for semantic similarity: 'minilm' or 'specter' (default: from config)"
-    ),
+    request: CitationGraphRequest,
     db: DatabaseConnection = Depends(get_db)
 ):
     """
@@ -121,49 +122,98 @@ async def get_citation_network(
     
     **Graph Types by Node:**
     - `central`: The selected paper (red node)
+    - `recommended_peer`: Other papers from same recommendation batch (gold)
     - `direct_citation`: Papers directly cited/citing (teal)
     - `co_cited`: Papers frequently co-cited with this one (light teal)
     - `bibliographic_couple`: Papers sharing references (yellow)
+    - `semantic_similar`: AI-matched papers based on content similarity (mint green)
+    
+    **Embedding Models:**
+    - `minilm`: Fast, efficient (384 dimensions) - all-MiniLM-L6-v2
+    - `specter`: More accurate (768 dimensions) - allenai/specter2
+    - If not specified, uses default from config (GRAPH_DEFAULT_MODEL)
+    
+    **Semantic Fallback:**
+    - Automatically triggered when citation graph has < 5 nodes (configurable)
+    - Uses pgvector cosine similarity to find related papers
+    - Supplements citation network with AI-matched papers
+    
+    **Network Topology:**
+    - Papers connect to each other via semantic bridges
+    - Recommended peers show how selected paper relates to other recommendations
+    - Edge distances vary by relationship strength
     
     **Frontend Integration:**
     ```javascript
-    // After user clicks on a recommended paper
-    const response = await fetch(`/api/v1/graph/citation-network/${paperId}?depth=1&max_nodes=50`);
+    // After user receives recommendations and clicks on one
+    const selectedPaper = "2fc7d040b64164126f0a56cf1562c7659bc2b146";
+    const otherRecommendations = ["163b4d6a...", "c62de1db...", ...];
+    
+    const response = await fetch(
+      `/api/v1/graph/citation-network/${selectedPaper}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          depth: 1,
+          max_nodes: 50,
+          embedding_model: 'specter',
+          recommended_papers: otherRecommendations
+        })
+      }
+    );
+    
     const graphData = await response.json();
     
-    // Render with D3.js, Cytoscape, or vis.js
+    // Graph includes:
+    // - Red node: Selected paper
+    // - Gold nodes: Other recommendations
+    // - Green nodes: Semantic similar
+    // - Teal/Yellow: Citations
     renderGraph(graphData.nodes, graphData.edges);
     ```
     
-    **Parameters:**
-    - `paper_id`: The paper to center the graph around
-    - `depth`: 1 = show direct connections only, 2 = show connections between related papers
-    - `max_nodes`: Limit graph size (10-100 nodes)
-    - `include_metadata`: Whether to include full paper details in nodes
+    **Request Body:**
+    - `depth`: Graph depth (1 or 2)
+    - `max_nodes`: Maximum nodes (10-100)
+    - `include_metadata`: Include paper details
+    - `embedding_model`: 'minilm' or 'specter'
+    - `recommended_papers`: List of peer paper IDs from same recommendation batch
     
     **Returns:**
-    - `nodes`: Array of papers with visualization properties (id, label, type, size, color)
-    - `edges`: Array of connections with type and strength
-    - `stats`: Graph statistics (citation counts, centrality, etc.)
-    - `metadata`: Overall graph information
+    - `nodes`: Papers with visualization properties (id, label, type, size, color)
+    - `edges`: Connections with type, strength, label, and distance
+    - `stats`: Graph statistics
+    - `metadata`: Graph information including model used
     """
     try:
         logger.info(
             "Fetching citation network",
             paper_id=paper_id,
-            depth=depth,
-            max_nodes=max_nodes
+            depth=request.depth,
+            max_nodes=request.max_nodes,
+            embedding_model=request.embedding_model,
+            recommended_peers=len(request.recommended_papers) if request.recommended_papers else 0
         )
         
         graph_service = GraphService(db)
         
         graph_data = await graph_service.get_citation_graph(
             paper_id=paper_id,
-            depth=depth,
-            max_nodes=max_nodes,
-            include_metadata=include_metadata,
-            embedding_model=embedding_model # ← THIS LINE MUST BE HERE
-
+            depth=request.depth,
+            max_nodes=request.max_nodes,
+            include_metadata=request.include_metadata,
+            embedding_model=request.embedding_model,
+            recommended_papers=request.recommended_papers or []
+        )
+        
+        logger.info(
+            "Citation network generated successfully",
+            paper_id=paper_id,
+            nodes=graph_data['metadata']['total_nodes'],
+            edges=graph_data['metadata']['total_edges'],
+            semantic_used=graph_data['metadata'].get('has_semantic_fallback', False),
+            model=graph_data['metadata'].get('embedding_model_used', False)
         )
         
         return graph_data
@@ -172,99 +222,10 @@ async def get_citation_network(
         logger.error(
             "Failed to generate citation graph",
             paper_id=paper_id,
-            error=str(e)
+            error=str(e),
+            exc_info=True
         )
         raise HTTPException(
             status_code=500,
             detail=f"Failed to generate citation graph: {str(e)}"
         )
-
-
-# @router.get(
-#     "/summary/{paper_id}",
-#     response_model=GraphSummaryResponse,
-#     summary="Get quick citation graph summary"
-# )
-# async def get_graph_summary(
-#     paper_id: str,
-#     current_user: dict = Depends(get_current_user),
-#     db: DatabaseConnection = Depends(get_db)
-# ):
-#     """
-#     Get a quick summary of citation graph without building full graph.
-    
-#     **Use Cases:**
-#     - Show citation counts in recommendation cards
-#     - Display graph size in tooltips ("View citation network with 45 papers")
-#     - Quick preview before loading full graph
-    
-#     **Frontend Integration:**
-#     ```javascript
-#     // Show summary in recommendation card
-#     const summary = await fetch(`/api/v1/graph/summary/${paperId}`);
-#     // Display: "📊 Citation Network: 23 citations, 15 co-cited papers"
-#     ```
-    
-#     **Returns:**
-#     - `total_citations`: Number of direct citations
-#     - `co_cited_papers`: Number of papers co-cited with this one
-#     - `bibliographic_couples`: Papers sharing references
-#     - `network_centrality`: Importance score (0-1)
-#     - `has_ground_truth`: Whether enhanced relationships exist
-#     """
-#     try:
-#         logger.debug(
-#             "Fetching graph summary",
-#             paper_id=paper_id,
-#             user_id=current_user['user_id']
-#         )
-        
-#         graph_service = GraphService(db)
-#         summary = await graph_service.get_graph_summary(paper_id)
-        
-#         return summary
-        
-#     except Exception as e:
-#         logger.error(
-#             "Failed to fetch graph summary",
-#             paper_id=paper_id,
-#             error=str(e)
-#         )
-#         raise HTTPException(
-#             status_code=500,
-#             detail=f"Failed to fetch graph summary: {str(e)}"
-#         )
-
-
-# @router.get(
-#     "/explore/{paper_id}",
-#     summary="Get explorable citation paths"
-# )
-# async def get_citation_paths(
-#     paper_id: str,
-#     target_paper_id: Optional[str] = Query(
-#         None,
-#         description="Find paths between source and target paper"
-#     ),
-#     max_paths: int = Query(
-#         3,
-#         ge=1,
-#         le=10,
-#         description="Maximum citation paths to return"
-#     ),
-#     current_user: dict = Depends(get_current_user),
-#     db: DatabaseConnection = Depends(get_db)
-# ):
-#     """
-#     Find citation paths between papers (coming soon).
-    
-#     **Use Case:**
-#     - User asks: "How is Paper A related to Paper B?"
-#     - Show citation chain: A → C → D → B
-    
-#     **Status:** Planned feature for citation graph exploration
-#     """
-#     raise HTTPException(
-#         status_code=501,
-#         detail="Citation path exploration is coming soon!"
-#     )
