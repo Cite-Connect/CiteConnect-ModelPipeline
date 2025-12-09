@@ -1,0 +1,27 @@
+{
+  "generated_at": "2025-12-09T19:10:29.970583",
+  "overall_drift_score": 0.36664772652131816,
+  "features": {
+    "domain": {
+      "type": "categorical",
+      "metric": "l1_distribution_shift",
+      "score": 0.9425974647213586
+    },
+    "citation_count": {
+      "type": "numeric",
+      "metric": "psi_normalized",
+      "score": 0.11973411332352067
+    },
+    "year": {
+      "type": "numeric",
+      "metric": "psi_normalized",
+      "score": 0.037611601519075236
+    }
+  },
+  "metadata": {
+    "baseline_rows": 12541,
+    "current_rows": 4181,
+    "baseline_fraction": 0.6,
+    "current_fraction": 0.2
+  }
+}

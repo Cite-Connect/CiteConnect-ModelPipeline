@@ -1,7 +1,34 @@
 {
-  "generated_at": "2025-12-08T23:30:32.819168",
-  "metric": "precision_at_10",
-  "min_support": 5,
-  "ratio_threshold": 0.8,
-  "under_served_fields": []
+  "paper_domain_fairness": {
+    "metric": "representation_count",
+    "disparity_threshold_ratio": 0.5,
+    "under_served_domains": [],
+    "domains": {
+      "fintech": {
+        "num_papers": 3803,
+        "under_served": false,
+        "boost_factor": 1.0
+      },
+      "healthcare": {
+        "num_papers": 5925,
+        "under_served": false,
+        "boost_factor": 1.0
+      },
+      "ai": {
+        "num_papers": 6379,
+        "under_served": false,
+        "boost_factor": 1.0
+      },
+      "quantum_computing": {
+        "num_papers": 4796,
+        "under_served": false,
+        "boost_factor": 1.0
+      }
+    }
+  },
+  "metadata": {
+    "source": "domain_representation_fairness.py",
+    "generated_at": "2025-12-09T18:13:38.171221",
+    "max_domain_count": 6379
+  }
 }

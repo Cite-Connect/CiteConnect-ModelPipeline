@@ -1,6 +1,7 @@
 """
 Recommendation API endpoints.
 Provides paper recommendations with personalization and evaluation.
+UPDATED: Added JWT authentication to all endpoints.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, Request
 from typing import Optional, List
@@ -15,6 +16,7 @@ from app.services.evaluation_service import EvaluationService
 from app.db.repositories.paper_repo import PaperRepository
 from app.db.repositories.user_repo import UserRepository
 from app.db.connection import get_db, DatabaseConnection
+from app.api.v1.auth import get_current_user  # NEW IMPORT
 
 logger = get_logger(__name__)
 
@@ -46,37 +48,41 @@ def get_recommendation_orchestrator(request: Request) -> RecommendationOrchestra
     "",
     response_model=RecommendationResponse,
     summary="Get personalized paper recommendations",
-    description="Generate personalized paper recommendations for a user."
+    description="Generate personalized paper recommendations. **Requires authentication.**"
 )
 async def get_recommendations(
     request_data: RecommendationRequest,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     orchestrator: RecommendationOrchestrator = Depends(get_recommendation_orchestrator)
 ):
     """
     Generate paper recommendations.
     Supports optional search query for search-augmented mode.
+    User can only request recommendations for themselves.
     """
+    
+    # Verify user is requesting their own recommendations
+    if request_data.user_id != current_user['user_id']:
+        logger.warning(
+            "Unauthorized recommendation request",
+            requesting_user=current_user['user_id'],
+            target_user=request_data.user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only request recommendations for yourself"
+        )
+    
     logger.info(
         "Recommendation request received",
         user_id=request_data.user_id,
         count=request_data.count,
         model=request_data.model_preference,
         session_id=request_data.session_id,
-        has_search_query=bool(request_data.search_query)  # ← NEW
+        has_search_query=bool(request_data.search_query)
     )
     
     try:
-        # Validate user
-        if not request_data.user_id:
-            logger.warning(
-                "Anonymous recommendation request",
-                session_id=request_data.session_id
-            )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="User ID is required for recommendations"
-            )
-        
         # Map model names
         model_map = {
             'minilm': 'all-MiniLM-L6-v2',
@@ -95,7 +101,7 @@ async def get_recommendations(
             user_id=request_data.user_id,
             model_name=model_name,
             count=request_data.count,
-            search_query=request_data.search_query,  # ← NEW: Pass search query
+            search_query=request_data.search_query,
             filters=request_data.filters.dict() if request_data.filters else None
         )
         logger.info(
@@ -109,7 +115,7 @@ async def get_recommendations(
             user_id=request_data.user_id,
             count=len(result.get('recommendations', [])),
             strategy=result.get('metadata', {}).get('strategy_used'),
-            search_query=request_data.search_query[:50] if request_data.search_query else None,  # ← NEW
+            search_query=request_data.search_query[:50] if request_data.search_query else None,
             time_ms=result.get('metadata', {}).get('generation_time_ms')
         )
         
@@ -141,16 +147,31 @@ async def get_recommendations(
 @router.get(
     "/{user_id}/history",
     summary="Get recommendation history",
-    description="Retrieve past recommendations for a user"
+    description="Retrieve past recommendations. **Requires authentication.**"
 )
 async def get_recommendation_history(
     user_id: int,
     limit: int = 10,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     db: DatabaseConnection = Depends(get_db)
 ):
     """
     Get user's recommendation history.
+    User can only view their own history.
     """
+    
+    # Verify user is accessing their own history
+    if user_id != current_user['user_id']:
+        logger.warning(
+            "Unauthorized history access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own recommendation history"
+        )
+    
     logger.info(
         "Recommendation history requested", 
         user_id=user_id, 
@@ -206,16 +227,31 @@ async def get_recommendation_history(
 @router.post(
     "/evaluate",
     summary="Evaluate recommendations",
-    description="Evaluate a set of recommendations against ground truth and user profile"
+    description="Evaluate recommendations against ground truth. **Requires authentication.**"
 )
 async def evaluate_recommendations(
     user_id: int,
     paper_ids: List[str],
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     db: DatabaseConnection = Depends(get_db)
 ):
     """
     Evaluate specific papers for a user using the EvaluationService.
+    User can only evaluate recommendations for themselves.
     """
+    
+    # Verify user is evaluating their own recommendations
+    if user_id != current_user['user_id']:
+        logger.warning(
+            "Unauthorized evaluation attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only evaluate recommendations for yourself"
+        )
+    
     logger.info(
         "Evaluation requested",
         user_id=user_id,

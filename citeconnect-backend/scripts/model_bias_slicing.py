@@ -207,4 +207,36 @@ def run_model_bias_analysis(
 
 
 if __name__ == "__main__":
-    run_model_bias_analysis()
+    import argparse
+
+    parser = argparse.ArgumentParser(
+        description="Run model bias analysis (supports local paths or gs:// URIs)."
+    )
+    parser.add_argument(
+        "--results",
+        default=str(RESULTS_PATH),
+        help="Path or gs:// URI to offline evaluation results JSON.",
+    )
+    parser.add_argument(
+        "--metadata",
+        default=str(METADATA_PATH),
+        help="Path or gs:// URI to metadata parquet/CSV.",
+    )
+    parser.add_argument(
+        "--report",
+        default=str(BIAS_REPORT_PATH),
+        help="Output path for model bias report JSON.",
+    )
+    parser.add_argument(
+        "--fairness-config",
+        default=str(FAIRNESS_CONFIG_PATH),
+        help="Output path for fairness config JSON.",
+    )
+
+    args = parser.parse_args()
+    run_model_bias_analysis(
+        results_path=args.results,
+        metadata_path=args.metadata,
+        report_path=Path(args.report),
+        fairness_config_path=Path(args.fairness_config),
+    )
