@@ -6,21 +6,21 @@
           "fintech"
         ],
         "boost_factor": 1.25,
-        "min_score_floor": 0.252
+        "min_score_floor": 0.253
       },
       "research_stage": {
         "underperforming_slices": [
           "masters"
         ],
         "boost_factor": 1.25,
-        "min_score_floor": 0.242
+        "min_score_floor": 0.246
       },
       "reading_level": {
         "underperforming_slices": [
           "intermediate"
         ],
         "boost_factor": 1.25,
-        "min_score_floor": 0.255
+        "min_score_floor": 0.256
       }
     }
   }

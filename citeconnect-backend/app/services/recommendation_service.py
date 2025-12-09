@@ -15,7 +15,7 @@ from app.db.repositories.user_repo import UserRepository
 from app.db.repositories.paper_repo import PaperRepository
 from app.db.repositories.ground_truth_repo import GroundTruthRepository
 from app.services.user_embedding_service import UserEmbeddingService
-from app.services.fairness_service import fairness_aware_rerank
+from app.services.fairness_service import fairness_aware_rerank, fairness_aware_rerank_sync
 from app.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -434,7 +434,7 @@ class RecommendationService:
         )
         
         # Step 8: Apply field-based fairness reranking (paper-level fairness)
-        fairness_reranked = self._apply_fairness_reranking(enriched)
+        fairness_reranked = await self._apply_fairness_reranking(enriched)
         
         logger.info(
             "Cold-start recommendations generated",
@@ -1990,7 +1990,7 @@ class RecommendationService:
         
         return selected
     
-    def _apply_fairness_reranking(self, papers: List[Dict]) -> List[Dict]:
+    async def _apply_fairness_reranking(self, papers: List[Dict]) -> List[Dict]:
         """
         Apply field-based fairness reranking to boost under-served research fields.
         
@@ -2027,7 +2027,9 @@ class RecommendationService:
         
         # Apply fairness reranking
         try:
-            reranked = fairness_aware_rerank(fairness_input, boost=1.05)
+            # Use async version with db connection for domain lookup
+            from app.services.fairness_service import fairness_aware_rerank
+            reranked = await fairness_aware_rerank(fairness_input, db=self.db)
             
             # Map back to original format, updating scores and adding primary_field
             result = []

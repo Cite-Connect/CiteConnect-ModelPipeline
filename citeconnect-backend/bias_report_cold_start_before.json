@@ -1,8 +1,8 @@
 
 {
-  "generated_at": "2025-12-08T23:29:31.024084",
+  "generated_at": "2025-12-09T18:23:03.622830",
   "total_users_in_eval": 13,
-  "total_eval_rows": 233,
+  "total_eval_rows": 236,
   "slices_analyzed": [
     "primary_domain",
     "research_stage",
@@ -18,18 +18,18 @@
         "mean_ground_truth_quality": 0.0
       },
       "fintech": {
-        "user_count": 9,
-        "mean_combined_score": 0.19266666666666665,
-        "std_combined_score": 0.07109211739395273,
-        "mean_profile_alignment": 0.3211111111111111,
+        "user_count": 11,
+        "mean_combined_score": 0.19327636363636366,
+        "std_combined_score": 0.06431824501121214,
+        "mean_profile_alignment": 0.32212727272727276,
         "mean_ground_truth_quality": 0.0
       },
       "quantum_computing": {
-        "user_count": 44,
-        "mean_combined_score": 0.3106786363636363,
-        "std_combined_score": 0.0310195959758365,
-        "mean_profile_alignment": 0.5068886363636362,
-        "mean_ground_truth_quality": 0.01636363636363636
+        "user_count": 45,
+        "mean_combined_score": 0.31310799999999994,
+        "std_combined_score": 0.03464840991060532,
+        "mean_profile_alignment": 0.5111799999999999,
+        "mean_ground_truth_quality": 0.016
       }
     },
     "research_stage": {
@@ -48,17 +48,17 @@
         "mean_ground_truth_quality": 0.0
       },
       "undergraduate": {
-        "user_count": 44,
-        "mean_combined_score": 0.3106786363636363,
-        "std_combined_score": 0.0310195959758365,
-        "mean_profile_alignment": 0.5068886363636362,
-        "mean_ground_truth_quality": 0.01636363636363636
+        "user_count": 45,
+        "mean_combined_score": 0.31310799999999994,
+        "std_combined_score": 0.03464840991060532,
+        "mean_profile_alignment": 0.5111799999999999,
+        "mean_ground_truth_quality": 0.016
       },
       "masters": {
-        "user_count": 5,
-        "mean_combined_score": 0.172392,
-        "std_combined_score": 0.0792317518170588,
-        "mean_profile_alignment": 0.2873199999999999,
+        "user_count": 7,
+        "mean_combined_score": 0.17914285714285713,
+        "std_combined_score": 0.0678084473697332,
+        "mean_profile_alignment": 0.2985714285714286,
         "mean_ground_truth_quality": 0.0
       }
     },
@@ -71,18 +71,18 @@
         "mean_ground_truth_quality": 0.0
       },
       "intermediate": {
-        "user_count": 14,
-        "mean_combined_score": 0.20294142857142858,
-        "std_combined_score": 0.09759294279646183,
-        "mean_profile_alignment": 0.3345214285714286,
-        "mean_ground_truth_quality": 0.005571428571428572
+        "user_count": 16,
+        "mean_combined_score": 0.20207625,
+        "std_combined_score": 0.09131853268059831,
+        "mean_profile_alignment": 0.33354374999999997,
+        "mean_ground_truth_quality": 0.004875
       },
       "introductory": {
-        "user_count": 43,
-        "mean_combined_score": 0.3074106976744186,
-        "std_combined_score": 0.022686952442784313,
-        "mean_profile_alignment": 0.5023976744186045,
-        "mean_ground_truth_quality": 0.014930232558139534
+        "user_count": 44,
+        "mean_combined_score": 0.3099695454545454,
+        "std_combined_score": 0.028009843233677802,
+        "mean_profile_alignment": 0.5068886363636362,
+        "mean_ground_truth_quality": 0.014590909090909092
       }
     }
   },
@@ -91,25 +91,25 @@
       "field": "primary_domain",
       "metric": "mean_combined_score",
       "best_slice": "quantum_computing",
-      "best_value": 0.3106786363636363,
+      "best_value": 0.31310799999999994,
       "worst_slice": "fintech",
-      "worst_value": 0.19266666666666665,
-      "disparity": 0.3798522198959364
+      "worst_value": 0.19327636363636366,
+      "disparity": 0.38271662290211783
     },
     {
       "field": "primary_domain",
       "metric": "mean_profile_alignment",
       "best_slice": "quantum_computing",
-      "best_value": 0.5068886363636362,
+      "best_value": 0.5111799999999999,
       "worst_slice": "fintech",
-      "worst_value": 0.3211111111111111,
-      "disparity": 0.3665056028583967
+      "worst_value": 0.32212727272727276,
+      "disparity": 0.3698359233004561
     },
     {
       "field": "primary_domain",
       "metric": "mean_ground_truth_quality",
       "best_slice": "quantum_computing",
-      "best_value": 0.01636363636363636,
+      "best_value": 0.016,
       "worst_slice": "healthcare",
       "worst_value": 0.0,
       "disparity": 1.0
@@ -118,25 +118,25 @@
       "field": "research_stage",
       "metric": "mean_combined_score",
       "best_slice": "undergraduate",
-      "best_value": 0.3106786363636363,
+      "best_value": 0.31310799999999994,
       "worst_slice": "masters",
-      "worst_value": 0.172392,
-      "disparity": 0.4451115080915239
+      "worst_value": 0.17914285714285713,
+      "disparity": 0.4278560204694317
     },
     {
       "field": "research_stage",
       "metric": "mean_profile_alignment",
       "best_slice": "undergraduate",
-      "best_value": 0.5068886363636362,
+      "best_value": 0.5111799999999999,
       "worst_slice": "masters",
-      "worst_value": 0.2873199999999999,
-      "disparity": 0.4331693800413396
+      "worst_value": 0.2985714285714286,
+      "disparity": 0.4159172335157309
     },
     {
       "field": "research_stage",
       "metric": "mean_ground_truth_quality",
       "best_slice": "undergraduate",
-      "best_value": 0.01636363636363636,
+      "best_value": 0.016,
       "worst_slice": "phd",
       "worst_value": 0.0,
       "disparity": 1.0
@@ -145,25 +145,25 @@
       "field": "reading_level",
       "metric": "mean_combined_score",
       "best_slice": "introductory",
-      "best_value": 0.3074106976744186,
+      "best_value": 0.3099695454545454,
       "worst_slice": "intermediate",
-      "worst_value": 0.20294142857142858,
-      "disparity": 0.339836153697014
+      "worst_value": 0.20207625,
+      "disparity": 0.34807708381908475
     },
     {
       "field": "reading_level",
       "metric": "mean_profile_alignment",
       "best_slice": "introductory",
-      "best_value": 0.5023976744186045,
+      "best_value": 0.5068886363636362,
       "worst_slice": "intermediate",
-      "worst_value": 0.3345214285714286,
-      "disparity": 0.3341501252796389
+      "worst_value": 0.33354374999999997,
+      "disparity": 0.34197824517667935
     },
     {
       "field": "reading_level",
       "metric": "mean_ground_truth_quality",
       "best_slice": "introductory",
-      "best_value": 0.014930232558139534,
+      "best_value": 0.014590909090909092,
       "worst_slice": "advanced",
       "worst_value": 0.0,
       "disparity": 1.0
