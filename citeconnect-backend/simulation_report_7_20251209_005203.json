@@ -1,0 +1,179 @@
+{
+  "simulation_id": "simulation-20251209-005001",
+  "user_id": 7,
+  "timestamp": "2025-12-09T00:52:03.820351",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "5425de16356015c2f26d2a50684c6c46d6998f51",
+      "title": "MIMIC-IV, a freely accessible electronic health record dataset",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "381ab7a640f5b46b62f7e08d1af4a8e0d3eadd55",
+      "title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "5cde474869cb230a29b3ba0f6f685f5162b1a1a1",
+      "title": "Revolutionizing healthcare: the role of artificial intelligence in clinical practice",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7dc6da87eaa6f830354feb2db14023cab8678c91",
+      "title": "ImageBind One Embedding Space to Bind Them All",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7b72711ac2ea7bd7f519cac162a4a6578bbb7d0d",
+      "title": "ARTIFICIAL INTELLIGENCE FOR THE REAL WORLD",
+      "relevance_score": null
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "5425de16356015c2f26d2a50684c6c46d6998f51",
+      "title": "MIMIC-IV, a freely accessible electronic health record dataset",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "381ab7a640f5b46b62f7e08d1af4a8e0d3eadd55",
+      "title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "5cde474869cb230a29b3ba0f6f685f5162b1a1a1",
+      "title": "Revolutionizing healthcare: the role of artificial intelligence in clinical practice",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7dc6da87eaa6f830354feb2db14023cab8678c91",
+      "title": "ImageBind One Embedding Space to Bind Them All",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7b72711ac2ea7bd7f519cac162a4a6578bbb7d0d",
+      "title": "ARTIFICIAL INTELLIGENCE FOR THE REAL WORLD",
+      "relevance_score": null
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "5425de16356015c2f26d2a50684c6c46d6998f51",
+      "paper_title": "MIMIC-IV, a freely accessible electronic health record datas...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T00:51:46.456350"
+    },
+    {
+      "number": 2,
+      "paper_id": "381ab7a640f5b46b62f7e08d1af4a8e0d3eadd55",
+      "paper_title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignme...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T00:51:47.515082"
+    },
+    {
+      "number": 3,
+      "paper_id": "5cde474869cb230a29b3ba0f6f685f5162b1a1a1",
+      "paper_title": "Revolutionizing healthcare: the role of artificial intellige...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T00:51:48.522926"
+    },
+    {
+      "number": 4,
+      "paper_id": "7dc6da87eaa6f830354feb2db14023cab8678c91",
+      "paper_title": "ImageBind One Embedding Space to Bind Them All...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:51:49.694860"
+    },
+    {
+      "number": 5,
+      "paper_id": "7b72711ac2ea7bd7f519cac162a4a6578bbb7d0d",
+      "paper_title": "ARTIFICIAL INTELLIGENCE FOR THE REAL WORLD...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:51:51.317334"
+    },
+    {
+      "number": 6,
+      "paper_id": "f2b0017ddd77fa38760a18145e63553105a1a236",
+      "paper_title": "The Flan Collection: Designing Data and Methods for Effectiv...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:51:52.835977"
+    },
+    {
+      "number": 7,
+      "paper_id": "2e965b5d97c2d6fb4af284307735be39283792ba",
+      "paper_title": "Extracting Training Data from Diffusion Models...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:51:54.009473"
+    },
+    {
+      "number": 8,
+      "paper_id": "e4d8de5d5d95c1075050de5bf0b19811141006bd",
+      "paper_title": "Computational approaches streamlining drug discovery...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T00:51:55.216220"
+    },
+    {
+      "number": 9,
+      "paper_id": "df70977e0347b76fb049c17c3956f643bcb43a55",
+      "paper_title": "Understanding of Machine Learning with Deep Learning: Archit...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T00:51:56.334513"
+    },
+    {
+      "number": 10,
+      "paper_id": "07be0ec1f45e21a1032616535d0290ee6bfe0f6b",
+      "paper_title": "Structure and Content-Guided Video Synthesis with Diffusion ...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T00:51:57.407874"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 20,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T02:21:11.708116",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 30,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T02:21:11.708116",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    }
+  ]
+}

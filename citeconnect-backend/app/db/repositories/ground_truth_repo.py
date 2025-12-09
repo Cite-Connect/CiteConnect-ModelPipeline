@@ -156,55 +156,146 @@ class GroundTruthRepository(BaseRepository):
             )
             raise
     
-    async def get_ground_truth_relationships(
+    async def get_canonical_papers_sampled(
         self,
-        paper_id: str
-    ) -> Optional[asyncpg.Record]:
+        domain: str,
+        tier_distribution: Dict[str, int]
+    ) -> List[Dict]:
         """
-        Get pre-computed relationships for a ground truth paper.
+        Get canonical papers with sampling by tier.
         
         Args:
-            paper_id: Paper identifier
+            domain: Research domain
+            tier_distribution: Dict of {tier: count} to sample
             
         Returns:
-            Optional[Record]: Relationship data including citation network
+            List of canonical papers with tier labels
         """
-        logger.debug(
-            "Getting ground truth relationships",
-            paper_id=paper_id
-        )
+        canonical_papers = []
         
-        query = """
-            SELECT *
-            FROM ground_truth_relationships
-            WHERE paper_id = $1
+        for tier, tier_count in tier_distribution.items():
+            # Get paper IDs for this tier
+            query = """
+                SELECT paper_ids
+                FROM domain_canonical_papers
+                WHERE domain = $1
+                AND recommendation_tier = $2
+            """
+            
+            result = await self.db.fetchrow(query, domain, tier)
+            
+            if result and result['paper_ids']:
+                paper_ids = result['paper_ids']
+                
+                # Sample requested count
+                import random
+                sample_size = min(tier_count, len(paper_ids))
+                sampled_ids = random.sample(paper_ids, sample_size)
+                
+                # Fetch full paper details
+                papers_query = """
+                    SELECT 
+                        paper_id, title, abstract, authors, year,
+                        citation_count, domain, sub_domains, venue
+                    FROM papers
+                    WHERE paper_id = ANY($1::text[])
+                """
+                
+                papers = await self.db.fetch(papers_query, sampled_ids)
+                
+                # Add tier label
+                for paper in papers:
+                    paper_dict = dict(paper)
+                    paper_dict['canonical_tier'] = tier
+                    canonical_papers.append(paper_dict)
+        
+            return canonical_papers
+
+
+    async def find_relevant_ground_truth_papers(
+        self,
+        interest_terms: List[str],
+        domain: str,
+        limit: int = 10
+    ) -> List[str]:
+        """
+        Find ground truth papers matching user interests.
+        
+        Args:
+            interest_terms: User's interest terms
+            domain: User's domain
+            limit: Max papers to return
+            
+        Returns:
+            List of GT paper IDs
+        """
+        # Build ILIKE patterns
+        conditions = ' OR '.join([
+            f"p.title ILIKE '%{term}%' OR p.abstract ILIKE '%{term}%'"
+            for term in interest_terms
+        ])
+        
+        query = f"""
+            SELECT p.paper_id
+            FROM papers p
+            INNER JOIN ground_truth_papers gtp ON p.paper_id = gtp.paper_id
+            WHERE p.domain = $1
+            AND ({conditions})
+            LIMIT $2
         """
         
-        try:
-            result = await self.db.fetchrow(query, paper_id)
+        results = await self.db.fetch(query, domain, limit)
+        return [r['paper_id'] for r in results]
+
+    async def get_ground_truth_relationships(
+            self,
+            paper_id: str
+        ) -> Optional[asyncpg.Record]:
+            """
+            Get pre-computed relationships for a ground truth paper.
             
-            if result:
-                logger.debug(
-                    "Relationships found",
-                    paper_id=paper_id,
-                    citation_count=len(result.get('citation_network', []))
-                )
-            else:
-                logger.debug(
-                    "No relationships found",
-                    paper_id=paper_id
-                )
-            
-            return result
-            
-        except Exception as e:
-            logger.error(
-                "Relationships retrieval failed",
-                paper_id=paper_id,
-                error=str(e),
-                exc_info=True
+            Args:
+                paper_id: Paper identifier
+                
+            Returns:
+                Optional[Record]: Relationship data including citation network
+            """
+            logger.debug(
+                "Getting ground truth relationships",
+                paper_id=paper_id
             )
-            raise
+            
+            query = """
+                SELECT *
+                FROM ground_truth_relationships
+                WHERE paper_id = $1
+            """
+            
+            try:
+                result = await self.db.fetchrow(query, paper_id)
+                
+                if result:
+                    logger.debug(
+                        "Relationships found",
+                        paper_id=paper_id,
+                        citation_count=len(result.get('citation_network', []))
+                    )
+                else:
+                    logger.debug(
+                        "No relationships found",
+                        paper_id=paper_id
+                    )
+                
+                return result
+                
+            except Exception as e:
+                logger.error(
+                    "Relationships retrieval failed",
+                    paper_id=paper_id,
+                    error=str(e),
+                    exc_info=True
+                )
+                raise
     
     async def create_ground_truth_paper(
         self,

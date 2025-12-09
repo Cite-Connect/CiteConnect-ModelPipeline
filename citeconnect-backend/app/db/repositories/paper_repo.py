@@ -451,6 +451,125 @@ class PaperRepository(BaseRepository):
                 exc_info=True
             )
             raise
+    # ============================================================================
+    # Add these methods to app/db/repositories/paper_repo.py
+    # ============================================================================
+
+    async def get_papers_from_citation_network(
+        self,
+        source_paper_ids: List[str],
+        limit: int
+    ) -> List[str]: 
+        """
+        Get papers from citation network (references + citations).
+        
+        Args:
+            source_paper_ids: Papers to get network from
+            limit: Max papers to return
+            
+        Returns:
+            List of paper IDs from citation network
+        """
+        all_citations = []
+        all_references = []
+        
+        for paper_id in source_paper_ids:
+            # Get papers this paper cites (references)
+            paper = await self.db.fetchrow(
+                "SELECT reference_ids FROM papers WHERE paper_id = $1",
+                paper_id
+            )
+            if paper and paper['reference_ids']:
+                all_references.extend(paper['reference_ids'])
+            
+            # Get papers citing this paper (citations)
+            citing_papers = await self.db.fetch(
+                "SELECT paper_id FROM papers WHERE $1 = ANY(reference_ids)",
+                paper_id
+            )
+            all_citations.extend([p['paper_id'] for p in citing_papers])
+        
+        # Combine and deduplicate
+        network_paper_ids = list(set(all_citations + all_references))
+        
+        # Remove source papers
+        network_paper_ids = [pid for pid in network_paper_ids if pid not in source_paper_ids]
+        
+        # Sample if too many
+        if len(network_paper_ids) > limit:
+            import random
+            return random.sample(network_paper_ids, limit)
+        else:
+            return network_paper_ids
+
+
+    async def get_recent_papers_in_domain(
+        self,
+        domain: str,
+        years_back: int = 1,
+        min_citations: int = 5,
+        limit: int = 20
+    ) -> List[Dict]:
+        """
+        Get recent papers in a domain.
+        
+        Args:
+            domain: Research domain
+            years_back: How many years back to look
+            min_citations: Minimum citation count
+            limit: Max papers to return
+            
+        Returns:
+            List of paper details
+        """
+        query = """
+            SELECT paper_id, title, abstract, authors, year,
+                citation_count, domain, sub_domains, venue
+            FROM papers
+            WHERE domain = $1
+            AND year >= EXTRACT(YEAR FROM CURRENT_DATE) - $2
+            AND citation_count >= $3
+            ORDER BY citation_count DESC
+            LIMIT $4
+        """
+    
+        results = await self.db.fetch(query, domain, years_back, min_citations, limit)
+        return [dict(r) for r in results]
+    
+    async def find_by_id(self, user_id: int) -> Optional[asyncpg.Record]:
+        """
+        Find user by user_id.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            Optional[Record]: User record or None
+        """
+        logger.debug("Finding user by ID", user_id=user_id)
+        
+        query = """
+            SELECT user_id, email, name, is_active, created_at, updated_at
+            FROM users
+            WHERE user_id = $1
+        """
+        
+        try:
+            result = await self.db.fetchrow(query, user_id)
+            logger.debug(
+                "User ID lookup complete",
+                user_id=user_id,
+                found=result is not None
+            )
+            return result
+        except Exception as e:
+            logger.error(
+                "User ID lookup failed",
+                user_id=user_id,
+                error=str(e),
+                exc_info=True
+            )
+            raise        
     async def _get_paper_embeddings(
         self,
         paper_ids: List[str],
@@ -490,9 +609,27 @@ class PaperRepository(BaseRepository):
         # Convert to dict
         embeddings = {}
         for row in results:
-            # Convert PostgreSQL vector to numpy array
-            embedding_list = row['embedding']
-            embeddings[row['paper_id']] = np.array(embedding_list)
+            # ✅ FIX: Handle both list and string formats from PostgreSQL
+            embedding_data = row['embedding']
+            
+            if isinstance(embedding_data, str):
+                # String format: '[-0.103, 0.456, ...]'
+                import json
+                embedding_list = json.loads(embedding_data)
+            elif isinstance(embedding_data, list):
+                # Already a list
+                embedding_list = embedding_data
+            else:
+                # Unknown format
+                logger.error(
+                    "Unexpected embedding format",
+                    paper_id=row['paper_id'],
+                    type=type(embedding_data)
+                )
+                continue
+            
+            # Convert to numpy array with explicit dtype
+            embeddings[row['paper_id']] = np.array(embedding_list, dtype=np.float64)
         
         logger.debug(
             "Paper embeddings fetched",
@@ -502,6 +639,60 @@ class PaperRepository(BaseRepository):
         )
         
         return embeddings
+    async def semantic_search_by_user_embedding(
+        self,
+        embedding: np.ndarray,
+        model: str,
+        domain: str,
+        limit: int
+    ) -> List[Dict]:
+        """
+        Semantic search using user embedding.
+        
+        Args:
+            embedding: User embedding vector
+            model: Model name ('minilm' or 'specter')
+            domain: Domain filter
+            limit: Max results
+            
+        Returns:
+            List of papers with semantic_similarity scores
+        """
+        table_map = {
+            'all-MiniLM-L6-v2': 'paper_embeddings_minilm',
+            'minilm': 'paper_embeddings_minilm',
+            'specter': 'paper_embeddings_specter',
+            'specter2': 'paper_embeddings_specter'
+        }
+        
+        embedding_table = table_map.get(model, 'paper_embeddings_minilm')
+        embedding_str = embedding.tolist()
+        
+        query = f"""
+            WITH user_emb AS (
+                SELECT $1::vector as emb
+            )
+            SELECT 
+                p.paper_id,
+                p.title,
+                p.abstract,
+                p.authors,
+                p.year,
+                p.citation_count,
+                p.domain,
+                p.sub_domains,
+                p.venue,
+                1 - (pe.embedding <=> ue.emb) as semantic_similarity
+            FROM papers p
+            JOIN {embedding_table} pe ON p.paper_id = pe.paper_id
+            CROSS JOIN user_emb ue
+            WHERE p.domain = $2
+            ORDER BY pe.embedding <=> ue.emb
+            LIMIT $3
+        """
+        
+        results = await self.db.fetch(query, embedding_str, domain, limit)
+        return [dict(r) for r in results]
     async def update_quality_score(
         self,
         paper_id: str,

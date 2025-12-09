@@ -29,7 +29,8 @@ from rich.console import Console
 from rich.table import Table
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich import print as rprint
-
+from datetime import datetime
+import json
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -59,6 +60,11 @@ INTERACTION_PROFILES = {
         ('cite', 1.0, 2)
     ]
 }
+def json_serial(obj):
+    """JSON serializer for objects not serializable by default."""
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 
 class UserJourneySimulator:
@@ -395,7 +401,8 @@ class UserJourneySimulator:
         console.print(f"\n📈 user_recommendation_state table:")
         console.print(f"  • Stage: {state['recommendation_stage']}")
         console.print(f"  • Interaction count: {state['interaction_count']}")
-        console.print(f"  • Last embedding update: {state['last_embedding_update']}")
+        console.print(f"  • Last embedding update: {state['last_embedding_update_minilm']}")
+        console.print(f"  • Last recommendation generated: {state['last_embedding_update_specter']}")
         
         # Check recommendation_events
         events_query = """
@@ -501,11 +508,11 @@ class UserJourneySimulator:
         console.print("  SIMULATION SUMMARY", style="cyan bold")
         console.print("="*70 + "\n", style="cyan bold")
         
-        # Interaction summary
+        # Interaction summary table
         table = Table(title="Interaction Log")
-        table.add_column("#", style="cyan", width=4)
-        table.add_column("Type", style="yellow", width=12)
-        table.add_column("Paper", style="green", width=50)
+        table.add_column("#", style="cyan", width=6)
+        table.add_column("Type", style="yellow", width=14)
+        table.add_column("Paper", style="green", width=52)
         
         for interaction in self.interactions[:10]:
             table.add_row(
@@ -516,11 +523,11 @@ class UserJourneySimulator:
         
         console.print(table)
         
-        # Save detailed report
+        # Build report with datetime serialization
         report = {
             'simulation_id': self.session_id,
             'user_id': self.user_id,
-            'timestamp': datetime.now().isoformat(),
+            'timestamp': datetime.now().isoformat(),  # ✅ Already serialized
             'interaction_profile': 'engaged_user',
             'total_interactions': len(self.interactions),
             'cold_start_recommendations': [
@@ -540,19 +547,31 @@ class UserJourneySimulator:
                 for p in self.warm_start_recs['recommendations'][:5]
             ],
             'interactions': self.interactions,
-            'database_snapshots': self.database_snapshots
+            # ✅ Convert database snapshots to JSON-serializable format
+            'database_snapshots': [
+                {
+                    'snapshot_type': snap_type,
+                    'data': {
+                        k: (v.isoformat() if isinstance(v, datetime) else v)
+                        for k, v in snap_data.items()
+                    }
+                }
+                for snap_type, snap_data in self.database_snapshots
+            ]
         }
         
-        # Save to file
+        # Save to file with datetime serialization
         report_path = Path(f"simulation_report_{self.user_id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
-        report_path.write_text(json.dumps(report, indent=2))
+        
+        # Use custom JSON serializer
+        report_path.write_text(json.dumps(report, indent=2, default=json_serial))
         
         console.print(f"\n💾 Report saved: {report_path}", style="green")
         
         # Final summary
         console.print("\n🎉 SIMULATION COMPLETE!", style="green bold")
-        console.print(f"  • User evolved from cold-start to warm-start")
-        console.print(f"  • Recommendations now based on actual behavior")
+        console.print(f"  • User evolved through recommendation stages")
+        console.print(f"  • Recommendations adapted to user behavior")
         console.print(f"  • System learned user's true preferences")
 
 

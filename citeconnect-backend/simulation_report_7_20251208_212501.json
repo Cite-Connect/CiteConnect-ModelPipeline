@@ -1,0 +1,179 @@
+{
+  "simulation_id": "simulation-20251208-212401",
+  "user_id": 7,
+  "timestamp": "2025-12-08T21:25:01.944009",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "17f509eb182118cac5f285527f5b1009026a79fb",
+      "title": "Overview of Machine Learning: Part 2: Deep Learning for Medical Image Analysis.",
+      "relevance_score": 0.377
+    },
+    {
+      "paper_id": "cd7a8d3d320fdc765b60bde97ed980349ba4ad14",
+      "title": "Predicting Patient Demographics From Chest Radiographs With Deep Learning.",
+      "relevance_score": 0.376
+    },
+    {
+      "paper_id": "460692744430380068cf59ee64adb8b645aee025",
+      "title": "Research Progress of Deep Learning in the Diagnosis and Prevention of Stroke",
+      "relevance_score": 0.372
+    },
+    {
+      "paper_id": "b6541522be6ab0d65f0ffe6cde46ad727c633e99",
+      "title": "CAD and AI for breast cancer - Recent Development and Challenges.",
+      "relevance_score": 0.367
+    },
+    {
+      "paper_id": "710cf2afc9dfb497e70a0d826befb7ac654c7775",
+      "title": "Deep learning-enabled system for rapid pneumothorax screening on chest CT.",
+      "relevance_score": 0.359
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "5425de16356015c2f26d2a50684c6c46d6998f51",
+      "title": "MIMIC-IV, a freely accessible electronic health record dataset",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "381ab7a640f5b46b62f7e08d1af4a8e0d3eadd55",
+      "title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "5cde474869cb230a29b3ba0f6f685f5162b1a1a1",
+      "title": "Revolutionizing healthcare: the role of artificial intelligence in clinical practice",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7dc6da87eaa6f830354feb2db14023cab8678c91",
+      "title": "ImageBind One Embedding Space to Bind Them All",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7b72711ac2ea7bd7f519cac162a4a6578bbb7d0d",
+      "title": "ARTIFICIAL INTELLIGENCE FOR THE REAL WORLD",
+      "relevance_score": null
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "17f509eb182118cac5f285527f5b1009026a79fb",
+      "paper_title": "Overview of Machine Learning: Part 2: Deep Learning for Medi...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:24:32.150251"
+    },
+    {
+      "number": 2,
+      "paper_id": "cd7a8d3d320fdc765b60bde97ed980349ba4ad14",
+      "paper_title": "Predicting Patient Demographics From Chest Radiographs With ...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:24:34.044211"
+    },
+    {
+      "number": 3,
+      "paper_id": "460692744430380068cf59ee64adb8b645aee025",
+      "paper_title": "Research Progress of Deep Learning in the Diagnosis and Prev...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:24:36.275003"
+    },
+    {
+      "number": 4,
+      "paper_id": "b6541522be6ab0d65f0ffe6cde46ad727c633e99",
+      "paper_title": "CAD and AI for breast cancer - Recent Development and Challe...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:24:38.200094"
+    },
+    {
+      "number": 5,
+      "paper_id": "710cf2afc9dfb497e70a0d826befb7ac654c7775",
+      "paper_title": "Deep learning-enabled system for rapid pneumothorax screenin...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:24:39.859213"
+    },
+    {
+      "number": 6,
+      "paper_id": "9c4717dc7df4907b31a00736a34fbda7b05cdbef",
+      "paper_title": "CheXpedition: Investigating Generalization Challenges for Tr...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:24:43.000600"
+    },
+    {
+      "number": 7,
+      "paper_id": "6af575c3c66061c2cdbba34a652da27b274ee2ac",
+      "paper_title": "Deep Learning for the Classification of Small (\u22642 cm) Pulmon...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:24:44.360164"
+    },
+    {
+      "number": 8,
+      "paper_id": "f8cd8cc5ba09b2fef8bed86c5a53e3ae1d551b12",
+      "paper_title": "Deep Learning-Based Decision-Tree Classifier for COVID-19 Di...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-08T21:24:45.835517"
+    },
+    {
+      "number": 9,
+      "paper_id": "6658317c3e543963a05d0d5f696204645bc56a22",
+      "paper_title": "Deep learning for cardiovascular medicine: a practical prime...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-08T21:24:47.259770"
+    },
+    {
+      "number": 10,
+      "paper_id": "e72b411615a83da9a971efbae765a9455ce38d0f",
+      "paper_title": "A comparative study of classification and prediction of Card...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-08T21:24:49.077714"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 10,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-12-09T02:21:11.708116",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 20,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T02:21:11.708116",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    }
+  ]
+}

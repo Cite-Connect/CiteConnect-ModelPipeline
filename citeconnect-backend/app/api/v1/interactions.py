@@ -154,37 +154,31 @@ async def track_interaction(
         # STEP 3: Update specialized tables based on interaction type
         # =====================================================================
         
-        # 3A: Save to user_saved_papers
+        # 3A: Save to user_saved_papers - USE REPOSITORY
         if interaction_data.interaction_type == 'save':
-            save_query = """
-                INSERT INTO user_saved_papers (user_id, paper_id, saved_at)
-                VALUES ($1, $2, NOW())
-                ON CONFLICT (user_id, paper_id) DO NOTHING
-            """
-            await db.execute(save_query, user_id, interaction_data.paper_id)
-            
+            await user_repo.save_paper(
+                user_id=user_id,
+                paper_id=interaction_data.paper_id
+            )
             logger.info(
                 "Paper saved",
                 user_id=user_id,
                 paper_id=interaction_data.paper_id
             )
-        
-        # 3B: Add to user_liked_papers
+
+        # 3B: Add to user_liked_papers - USE REPOSITORY
         if interaction_data.interaction_type == 'like':
-            like_query = """
-                INSERT INTO user_liked_papers (user_id, paper_id, liked_at)
-                VALUES ($1, $2, NOW())
-                ON CONFLICT (user_id, paper_id) DO NOTHING
-            """
-            await db.execute(like_query, user_id, interaction_data.paper_id)
-            
+            await user_repo.like_paper(
+                user_id=user_id,
+                paper_id=interaction_data.paper_id
+            )
             logger.info(
                 "Paper liked",
                 user_id=user_id,
                 paper_id=interaction_data.paper_id
             )
-        
-        # 3C: Add negative filters
+
+        # 3C: Add negative filters - USE REPOSITORY (already correct!)
         if interaction_data.interaction_type in ['dismiss', 'not_interested']:
             filter_type = 'not_interested' if interaction_data.interaction_type == 'not_interested' else 'dismissed'
             
@@ -194,13 +188,13 @@ async def track_interaction(
                 filter_type=filter_type,
                 reason=f"User {interaction_data.interaction_type}"
             )
-            
             logger.info(
                 "Paper filtered",
                 user_id=user_id,
                 paper_id=interaction_data.paper_id,
                 filter_type=filter_type
             )
+
         
         # =====================================================================
         # STEP 4: Check if embedding regeneration needed
