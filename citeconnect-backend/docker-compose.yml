@@ -50,6 +50,31 @@ services:
       timeout: 3s
       retries: 3
 
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: citeconnect-prometheus
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+    ports:
+      - "9090:9090"
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: citeconnect-grafana
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - grafana-storage:/var/lib/grafana
+    depends_on:
+      - prometheus
+
   # MLflow Tracking Server
   # MLflow Tracking Server
   mlflow:
@@ -116,6 +141,8 @@ services:
 volumes:
   redis_data:
   mlflow_data:
+  grafana-storage:
+
 
 networks:
   default:
