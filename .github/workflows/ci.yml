@@ -41,22 +41,11 @@ jobs:
 
     - name: Install dependencies
       run: |
-        echo "=== Installing from citeconnect-backend/requirements.txt ==="
         python -m pip install --upgrade pip
         
-        if [ -f "citeconnect-backend/requirements.txt" ]; then
-          echo "✓ Found citeconnect-backend/requirements.txt"
-          pip install -r citeconnect-backend/requirements.txt
-        else
-          echo "✗ citeconnect-backend/requirements.txt NOT FOUND"
-          exit 1
-        fi
-        
-        if [ -f "requirements-dev.txt" ]; then
-          echo "✓ Found requirements-dev.txt"
-          pip install -r requirements-dev.txt
-        else
-          echo "⚠ requirements-dev.txt not found, skipping"
+        # Install from citeconnect-backend
+        echo "Installing citeconnect-backend dependencies..."
+        pip install -r ./citeconnect-backend/requirements.txt
         fi
 
     - name: Run all tests from tests folder
