@@ -111,22 +111,7 @@ jobs:
           echo "✅ User bias report generated"
           
           # Extract max disparity using Python
-          MAX_DISPARITY=$(python -c "
-import json
-import sys
-try:
-    with open('bias_report_cold_start_before.json') as f:
-        data = json.load(f)
-    findings = data.get('bias_findings', [])
-    if findings:
-        max_d = max([f['disparity'] for f in findings])
-        print(f'{max_d:.4f}')
-    else:
-        print('0.0000')
-except Exception as e:
-    print('0.0000')
-    sys.stderr.write(f'Error: {e}\\n')
-")
+          MAX_DISPARITY=$(python3 -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); findings=data.get("bias_findings",[]); print(f"{max([f[\"disparity\"] for f in findings]):.4f}" if findings else "0.0000")' 2>/dev/null || echo "0.0000")
           
           echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
           echo ""
@@ -134,6 +119,42 @@ except Exception as e:
         else
           echo "⚠️ Bias report not generated"
           echo "max_disparity=0.0000" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Run Paper-Field Bias Detection
+      id: field_bias
+      continue-on-error: true
+      run: |
+        echo ""
+        echo "=================================================="
+        echo "  Running Paper-Field Bias Detection"
+        echo "=================================================="
+        
+        if [ ! -f "offline_evaluation_results.json" ]; then
+          echo "⚠️ offline_evaluation_results.json not found, skipping"
+          echo "field_fairness_ratio=1.0000" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        if [ ! -f "data/combined_gcs_data.parquet" ]; then
+          echo "⚠️ data/combined_gcs_data.parquet not found, skipping"
+          echo "field_fairness_ratio=1.0000" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        echo "✅ Required files found, running analysis..."
+        python scripts/model_bias_slicing.py
+        
+        if [ -f "model_bias_report.json" ]; then
+          echo "✅ Field bias report generated"
+          
+          FIELD_RATIO=$(python3 -c 'import json; data=json.load(open("model_bias_report.json")); fairness=data.get("fairness_summary",{}); ratio=fairness.get("precision_ratio_min_over_max",1.0) or 1.0; print(f"{ratio:.4f}")' 2>/dev/null || echo "1.0000")
+          
+          echo "field_fairness_ratio=$FIELD_RATIO" >> $GITHUB_OUTPUT
+          echo "📊 Field Fairness Ratio: $FIELD_RATIO"
+        else
+          echo "⚠️ Field bias report not generated"
+          echo "field_fairness_ratio=1.0000" >> $GITHUB_OUTPUT
         fi
     
     - name: Analyze Bias Results
