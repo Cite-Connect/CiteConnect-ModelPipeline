@@ -36,11 +36,12 @@ jobs:
           requirements-dev.txt
 
     - name: Install dependencies
-      working-directory: .
       run: |
         python -m pip install --upgrade pip
         pip install -r citeconnect-backend/requirements.txt
-        pip install -r requirements-dev.txt
+        if [ -f requirements-dev.txt ]; then
+          pip install -r requirements-dev.txt
+        fi
 
     - name: Run all tests from tests folder
       env:
