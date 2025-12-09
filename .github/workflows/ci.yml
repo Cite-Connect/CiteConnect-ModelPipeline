@@ -1,0 +1,281 @@
+name: Unit & Integration Tests
+
+on:
+  push:
+    branches: ['*']
+  pull_request:
+    branches: ['*']
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    defaults:
+      run:
+        working-directory: citeconnect-backend
+    
+    strategy:
+      matrix:
+        python-version: ['3.11']
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install -r ../requirements-dev.txt
+    
+    - name: Run all tests from tests folder
+      env:
+        PYTHONPATH: citeconnect-backend
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        ENVIRONMENT: test
+      run: |
+        cd ..
+        echo "Running tests from citeconnect-backend/tests/ directory"
+        echo "This includes:"
+        echo "  - tests/test_api/ (API endpoint tests)"
+        echo "  - tests/test_services/ (Service layer tests)"
+        echo "  - tests/test_utils/ (Utility tests)"
+        echo "  - tests/integration/ (Integration tests)"
+        echo ""
+        pytest --cov=citeconnect-backend/app \
+               --cov-report=html \
+               --cov-report=term-missing \
+               --cov-report=xml \
+               --cov-fail-under=80 \
+               -v \
+               --tb=short \
+               citeconnect-backend/tests/
+    
+    - name: Upload coverage to artifacts
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-report
+        path: htmlcov/
+    
+    - name: Upload coverage XML
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: coverage-xml
+        path: coverage.xml
+  
+  bias-detection:
+    runs-on: ubuntu-latest
+    needs: test  # Run after tests pass
+    continue-on-error: true  # Non-blocking - won't fail CI
+    
+    defaults:
+      run:
+        working-directory: citeconnect-backend
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install bias detection dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pandas numpy asyncpg python-dotenv matplotlib
+    
+    - name: Run User-Profile Bias Detection
+      id: user_bias
+      env:
+        DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      run: |
+        echo "=================================================="
+        echo "  Running User-Profile Bias Detection"
+        echo "=================================================="
+        
+        python scripts/bias_slicing_cold_start.py
+        
+        # Check if bias report was generated
+        if [ -f "bias_report_cold_start_before.json" ]; then
+          echo "✅ User bias report generated"
+          
+          # Extract max disparity using Python
+          MAX_DISPARITY=$(python -c "
+import json
+import sys
+try:
+    with open('bias_report_cold_start_before.json') as f:
+        data = json.load(f)
+    findings = data.get('bias_findings', [])
+    if findings:
+        max_d = max([f['disparity'] for f in findings])
+        print(f'{max_d:.4f}')
+    else:
+        print('0.0000')
+except Exception as e:
+    print('0.0000')
+    sys.stderr.write(f'Error: {e}\\n')
+")
+          
+          echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
+          echo ""
+          echo "📊 Max Disparity Found: $MAX_DISPARITY"
+        else
+          echo "⚠️ Bias report not generated"
+          echo "max_disparity=0.0000" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Analyze Bias Results
+      env:
+        MAX_DISPARITY: ${{ steps.user_bias.outputs.max_disparity }}
+        FIELD_RATIO: ${{ steps.field_bias.outputs.field_fairness_ratio }}
+      run: |
+        python - <<'EOF'
+import sys
+import os
+
+max_disparity = float(os.environ.get('MAX_DISPARITY', '0'))
+field_ratio = float(os.environ.get('FIELD_RATIO', '1.0'))
+alert_threshold = 0.20  # 20%
+critical_threshold = 0.30  # 30%
+field_threshold = 0.80  # 80% - field fairness threshold
+
+print("\n" + "="*60)
+print("  BIAS DETECTION RESULTS")
+print("="*60)
+print(f"User-Profile Max Disparity: {max_disparity:.2%}")
+print(f"Field Fairness Ratio: {field_ratio:.2%}")
+print(f"Alert Threshold: {alert_threshold:.2%}")
+print(f"Critical Threshold: {critical_threshold:.2%}")
+print("="*60 + "\n")
+
+# Check user-profile bias
+user_status = "PASS"
+if max_disparity >= critical_threshold:
+    user_status = "CRITICAL"
+    print(f"🚨 USER-PROFILE BIAS: CRITICAL!")
+    print(f"   Disparity {max_disparity:.2%} >= {critical_threshold:.2%}")
+    print(f"\n⚠️  This would normally block deployment in production.")
+    print(f"   Currently set to WARNING only (non-blocking).\n")
+elif max_disparity >= alert_threshold:
+    user_status = "WARNING"
+    print(f"⚠️  USER-PROFILE BIAS: WARNING")
+    print(f"   Disparity {max_disparity:.2%} >= {alert_threshold:.2%}")
+else:
+    print(f"✅ USER-PROFILE BIAS: PASS")
+    print(f"   Disparity {max_disparity:.2%} < {alert_threshold:.2%}")
+
+print()
+
+# Check field-level fairness
+field_status = "PASS"
+if field_ratio < field_threshold:
+    field_disparity = (1 - field_ratio) * 100
+    field_status = "WARNING"
+    print(f"⚠️  FIELD-LEVEL FAIRNESS: WARNING")
+    print(f"   Best/Worst field ratio: {field_ratio:.2%}")
+    print(f"   Disparity: {field_disparity:.1f}%")
+else:
+    print(f"✅ FIELD-LEVEL FAIRNESS: PASS")
+    print(f"   Best/Worst field ratio: {field_ratio:.2%}")
+
+print("\n" + "="*60)
+
+if user_status in ["CRITICAL", "WARNING"] or field_status == "WARNING":
+    print("\n📋 Action Required:")
+    print("  1. Review bias reports in artifacts")
+    print("  2. Apply mitigation strategies")
+    print("  3. Re-run evaluation")
+    print("="*60)
+EOF
+    
+    - name: Upload Bias Reports
+      uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: bias-reports
+        path: |
+          citeconnect-backend/bias_report_cold_start_before.json
+          citeconnect-backend/model_bias_report.json
+          citeconnect-backend/fairness_config.json
+          citeconnect-backend/bias_config/bias_mitigation_config.json
+          citeconnect-backend/bias_plots/
+    
+    - name: Comment on PR with Bias Results
+      if: github.event_name == 'pull_request' && steps.user_bias.outputs.max_disparity != ''
+      uses: actions/github-script@v7
+      with:
+        script: |
+          const disparity = parseFloat('${{ steps.user_bias.outputs.max_disparity }}');
+          const fieldRatio = parseFloat('${{ steps.field_bias.outputs.field_fairness_ratio }}' || '1.0');
+          const alertThreshold = 0.20;
+          const criticalThreshold = 0.30;
+          const fieldThreshold = 0.80;
+          
+          // Check if any bias detected
+          const hasBias = disparity >= alertThreshold || fieldRatio < fieldThreshold;
+          
+          if (!hasBias) {
+            // No comment needed for passing checks
+            return;
+          }
+          
+          let emoji = disparity >= criticalThreshold ? '🚨' : '⚠️';
+          let status = disparity >= criticalThreshold ? 'CRITICAL' : 'WARNING';
+          let color = disparity >= criticalThreshold ? '🔴' : '🟡';
+          
+          // Build field analysis section
+          let fieldSection = '';
+          if (fieldRatio < fieldThreshold) {
+            const fieldDisparity = ((1 - fieldRatio) * 100).toFixed(1);
+            fieldSection = `\n### 📊 Field-Level Fairness\n${color} **Field Fairness Ratio:** ${(fieldRatio * 100).toFixed(1)}%\n**Disparity:** ${fieldDisparity}% between best and worst research fields\n`;
+          }
+          
+          const body = `## ${emoji} Bias Detection ${status}
+          
+### 👥 User-Profile Bias
+${color} **Max Disparity Detected:** ${(disparity * 100).toFixed(2)}%
+
+${disparity >= criticalThreshold ? 
+  '🚨 **Critical bias levels detected!** This would block deployment in production.' : 
+  disparity >= alertThreshold ?
+  '⚠️ **Elevated bias detected** - monitoring recommended.' :
+  '✅ **User-profile bias within acceptable limits.**'}
+${fieldSection}
+### What This Means
+- **User-profile bias:** Disparities between user groups (domain, research stage, reading level)
+- **Field-level fairness:** Performance differences across research fields
+
+### Next Steps
+1. 📥 Download \`bias-reports\` from [workflow artifacts](${context.payload.repository.html_url}/actions/runs/${context.runId})
+2. 📊 Review bias reports:
+   - \`bias_report_cold_start_before.json\` - User-profile analysis
+   - \`model_bias_report.json\` - Field-level analysis
+   - \`bias_plots/\` - Visualizations
+3. 🔧 Check auto-generated mitigation configs:
+   - \`bias_mitigation_config.json\` - User-profile mitigation
+   - \`fairness_config.json\` - Field-level fairness
+4. ✅ Verify mitigation is applied in RecommendationService
+5. 🔄 Re-run evaluation after applying fixes
+
+---
+⚙️ *This is currently non-blocking and won't prevent merging.*
+`;
+          
+          github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: body
+          });
