@@ -146,7 +146,11 @@ async def get_recommendation_history(
 ):
     """
     Get user's recommendation history.
+<<<<<<< HEAD
     User can only view their own history.
+=======
+    Uses InteractionRepository - NO SQL HERE.
+>>>>>>> 03b58cd (updated warm start recommendation)
     """
     
     # Verify user is accessing their own history
@@ -168,21 +172,14 @@ async def get_recommendation_history(
     )
     
     try:
-        query = """
-           SELECT 
-                re.event_id,
-                re.recommended_paper_ids,
-                re.embedding_model,
-                re.event_timestamp
-            FROM recommendation_events re
-            WHERE re.user_id = $1
-            ORDER BY re.event_timestamp DESC
-            LIMIT $2
-        """
+        from app.db.repositories.interaction_repo import InteractionRepository
+        interaction_repo = InteractionRepository(db)
         
-        logger.info("Executing history query", user_id=user_id)
-        results = await db.fetch(query, user_id, limit)
-        logger.info("History query complete", result_count=len(results))
+        # Use repository method instead of direct SQL
+        history_results = await interaction_repo.get_recommendation_history(
+            user_id=user_id,
+            limit=limit
+        )
         
         history = [
             {
@@ -191,7 +188,7 @@ async def get_recommendation_history(
                 "model": row['embedding_model'],
                 "timestamp": row['event_timestamp'].isoformat()
             }
-            for row in results
+            for row in history_results
         ]
         
         return {
@@ -211,7 +208,6 @@ async def get_recommendation_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve recommendation history"
         )
-
 
 @router.post(
     "/evaluate",

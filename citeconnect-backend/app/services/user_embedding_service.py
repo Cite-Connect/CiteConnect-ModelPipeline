@@ -295,9 +295,9 @@ class UserEmbeddingService:
             return await self._generate_from_profile(user_id)
         
         # Convert to numpy arrays with proper shape
-        minilm_embeddings = np.array(minilm_embeddings_list)  # Shape: (n_papers, 384)
-        specter_embeddings = np.array(specter_embeddings_list)  # Shape: (n_papers, 768)
-        weights = np.array(valid_weights)  # Shape: (n_papers,)
+        minilm_embeddings = np.array(minilm_embeddings_list, dtype=np.float64)
+        specter_embeddings = np.array(specter_embeddings_list, dtype=np.float64)
+        weights = np.array(valid_weights, dtype=np.float64)  # Shape: (n_papers,)
         
         logger.debug(
             "Embedding arrays prepared",

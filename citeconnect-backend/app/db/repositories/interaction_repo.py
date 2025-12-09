@@ -465,7 +465,63 @@ class InteractionRepository(BaseRepository):
                 exc_info=True
             )
             raise
-    
+# ============================================================================
+    # Add these methods to app/db/repositories/interaction_repo.py
+    # ============================================================================
+
+    async def get_seen_paper_ids(
+        self,
+        user_id: int
+    ) -> List[str]:
+        """
+        Get all paper IDs user has interacted with.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            List of paper IDs
+        """
+        query = """
+            SELECT DISTINCT paper_id
+            FROM user_interactions
+            WHERE user_id = $1
+        """
+        
+        results = await self.db.fetch(query, user_id)
+        return [r['paper_id'] for r in results]
+
+
+    async def get_recommendation_history(
+        self,
+        user_id: int,
+        limit: int = 10
+    ) -> List[Dict]:
+        """
+        Get user's recommendation history.
+        
+        Args:
+            user_id: User identifier
+            limit: Number of events to return
+            
+        Returns:
+            List of recommendation events
+        """
+        query = """
+            SELECT 
+                re.event_id,
+                re.recommended_paper_ids,
+                re.embedding_model,
+                re.event_timestamp
+            FROM recommendation_events re
+            WHERE re.user_id = $1
+            ORDER BY re.event_timestamp DESC
+            LIMIT $2
+        """
+        
+        results = await self.db.fetch(query, user_id, limit)
+        return [dict(r) for r in results]
+
     async def check_embedding_update_trigger(
         self,
         user_id: int

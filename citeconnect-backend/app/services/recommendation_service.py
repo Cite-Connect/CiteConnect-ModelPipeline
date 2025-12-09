@@ -1028,6 +1028,36 @@ class RecommendationService:
     # Candidate retrieval helpers
     # -------------------------------------------------------------------------
 
+    async def _retrieve_citation_network_candidates(
+        self,
+        paper_ids: List[str],
+        limit: int
+    ) -> List[Dict]:
+        """
+        Retrieve papers from citation networks of user's saved papers.
+        Uses PaperRepository - NO SQL HERE.
+        """
+        logger.debug(
+            "Retrieving citation network candidates",
+            saved_papers=len(paper_ids),
+            limit=limit
+        )
+        
+        if not paper_ids:
+            return []
+        
+        # Use repository method
+        network_paper_ids = await self.paper_repo.get_papers_from_citation_network(
+            source_paper_ids=paper_ids,
+            limit=limit
+        )
+        
+        # Fetch full details using repository
+        if network_paper_ids:
+            candidates = await self.paper_repo.find_by_ids(network_paper_ids)
+            return [dict(c) for c in candidates]
+        else:
+            return []
     async def _retrieve_semantic_candidates(
         self,
         user_embedding: np.ndarray,
@@ -1037,6 +1067,7 @@ class RecommendationService:
     ) -> List[Dict]:
         """
         Retrieve papers similar to user embedding using vector search.
+        Uses PaperRepository - NO SQL HERE.
         
         Args:
             user_embedding: User's embedding vector
@@ -1053,52 +1084,19 @@ class RecommendationService:
             model=model,
             limit=limit
         )
-        table_map = {
-        'all-MiniLM-L6-v2': 'paper_embeddings_minilm',
-        'minilm': 'paper_embeddings_minilm',
-        'specter': 'paper_embeddings_specter',
-        'specter2': 'paper_embeddings_specter'
-        }
         
-        # Determine table based on model
-        embedding_table = table_map.get(model, 'paper_embeddings_minilm')
-        #embedding_table = f'paper_embeddings_{model}'
-        
-        # Convert embedding to PostgreSQL vector string
-        embedding_str = user_embedding.tolist()
-        
-        # Vector similarity search
-        query = f"""
-            WITH user_emb AS (
-                SELECT $1::vector as emb
-            )
-            SELECT 
-                p.paper_id,
-                p.title,
-                p.abstract,
-                p.authors,
-                p.year,
-                p.citation_count,
-                p.domain,
-                p.sub_domains,
-                p.venue,
-                1 - (pe.embedding <=> ue.emb) as semantic_similarity
-            FROM papers p
-            JOIN {embedding_table} pe ON p.paper_id = pe.paper_id
-            CROSS JOIN user_emb ue
-            WHERE p.domain = $2
-            ORDER BY pe.embedding <=> ue.emb
-            LIMIT $3
-        """
-        
-        results = await self.db.fetch(query, embedding_str, domain, limit)
-        
-        candidates = [dict(r) for r in results]
+        # Use repository method for semantic search
+        candidates = await self.paper_repo.semantic_search_by_user_embedding(
+            embedding=user_embedding,
+            model=model,
+            domain=domain,
+            limit=limit
+        )
         
         logger.debug(
             "Semantic candidates retrieved",
             count=len(candidates),
-            avg_similarity=np.mean([c['semantic_similarity'] for c in candidates]) if candidates else 0
+            avg_similarity=np.mean([c.get('semantic_similarity', 0) for c in candidates]) if candidates else 0
         )
         
         return candidates
@@ -1111,6 +1109,7 @@ class RecommendationService:
     ) -> List[Dict]:
         """
         Retrieve canonical papers based on user's research stage.
+        Uses GroundTruthRepository - NO SQL HERE.
         
         Args:
             domain: Research domain
@@ -1129,84 +1128,35 @@ class RecommendationService:
         
         # Determine tier distribution based on research stage
         if user_stage in ['undergraduate', 'masters']:
-            # Focus on fundamentals
             tier_distribution = {
                 'foundational': 15,
                 'recent': 5,
                 'trending': 5
             }
         elif user_stage in ['phd', 'postdoc', 'professor']:
-            # Focus on cutting-edge
             tier_distribution = {
                 'foundational': 5,
                 'recent': 10,
                 'trending': 10
             }
         elif user_stage == 'industry':
-            # Focus on practical and trending
             tier_distribution = {
                 'foundational': 3,
                 'recent': 12,
                 'trending': 10
             }
         else:
-            # Default balanced
             tier_distribution = {
                 'foundational': 8,
                 'recent': 9,
                 'trending': 8
             }
         
-        # Retrieve canonical papers for each tier
-        canonical_papers = []
-        
-        for tier, tier_count in tier_distribution.items():
-            # Get paper IDs for this tier
-            query = """
-                SELECT paper_ids
-                FROM domain_canonical_papers
-                WHERE domain = $1
-                  AND recommendation_tier = $2
-            """
-            
-            result = await self.db.fetchrow(query, domain, tier)
-            
-            if result and result['paper_ids']:
-                paper_ids = result['paper_ids']
-                
-                # Sample requested count (or all if fewer available)
-                sample_size = min(tier_count, len(paper_ids))
-                sampled_ids = random.sample(paper_ids, sample_size)
-                
-                # Fetch full paper details
-                papers_query = """
-                    SELECT 
-                        paper_id,
-                        title,
-                        abstract,
-                        authors,
-                        year,
-                        citation_count,
-                        domain,
-                        sub_domains,
-                        venue
-                    FROM papers
-                    WHERE paper_id = ANY($1::text[])
-                """
-                
-                papers = await self.db.fetch(papers_query, sampled_ids)
-                
-                # Add tier label
-                for paper in papers:
-                    paper_dict = dict(paper)
-                    paper_dict['canonical_tier'] = tier
-                    canonical_papers.append(paper_dict)
-                
-                logger.debug(
-                    "Canonical tier retrieved",
-                    tier=tier,
-                    count=len(papers)
-                )
+        # Use repository method to get canonical papers
+        canonical_papers = await self.gt_repo.get_canonical_papers_sampled(
+            domain=domain,
+            tier_distribution=tier_distribution
+        )
         
         logger.debug(
             "Canonical candidates retrieved",
@@ -1214,7 +1164,7 @@ class RecommendationService:
         )
         
         return canonical_papers
-    
+        
     async def _retrieve_ground_truth_candidates(
         self,
         user_interests: List[str],
@@ -1223,6 +1173,7 @@ class RecommendationService:
     ) -> List[Dict]:
         """
         Retrieve papers from ground truth citation networks.
+        Uses GroundTruthRepository - NO SQL HERE.
         
         Args:
             user_interests: User's interest terms
@@ -1238,27 +1189,15 @@ class RecommendationService:
             interests=user_interests,
             count=count
         )
-        # Find relevant ground truth papers
-        interest_patterns = ' OR '.join([
-            f"p.title ILIKE '%{interest}%' OR p.abstract ILIKE '%{interest}%'"
-            for interest in user_interests
-        ])
-        print(f"Interest patterns: {interest_patterns}")
         
-        query = f"""
-            SELECT p.paper_id
-            FROM papers p
-            INNER JOIN ground_truth_papers gtp ON p.paper_id = gtp.paper_id
-            WHERE p.domain = $1
-              AND ({interest_patterns})
-            LIMIT 10
-        """
+        # Use repository method to find relevant GT papers
+        gt_paper_ids = await self.gt_repo.find_relevant_ground_truth_papers(
+            interest_terms=user_interests,
+            domain=domain,
+            limit=10
+        )
         
-        print(f"Executing GT paper query: {query}")
-        
-        gt_papers = await self.db.fetch(query, domain)
-        print(f"GT papers fetched: {gt_papers}")
-        if not gt_papers:
+        if not gt_paper_ids:
             logger.warning(
                 "No relevant ground truth papers found",
                 domain=domain,
@@ -1266,8 +1205,6 @@ class RecommendationService:
             )
             return []
         
-        gt_paper_ids = [p['paper_id'] for p in gt_papers]
-        print(f"Relevant GT paper IDs: {gt_paper_ids}")
         logger.debug(
             "Relevant GT papers found",
             count=len(gt_paper_ids)
@@ -1278,49 +1215,35 @@ class RecommendationService:
         
         for gt_id in gt_paper_ids:
             relationships = await self.gt_repo.get_ground_truth_relationships(gt_id)
-            if relationships and relationships['citation_network']:
+            if relationships and relationships.get('citation_network'):
                 all_network_papers.extend(relationships['citation_network'])
-        # Deduplicate
+        
+        # Deduplicate and sample
         unique_network_papers = list(set(all_network_papers))
-        # Sample requested count
+        
         if len(unique_network_papers) > count:
             sampled_ids = random.sample(unique_network_papers, count)
-            print(f"Sampled GT network paper IDs: {sampled_ids}")
         else:
             sampled_ids = unique_network_papers
         
-        # Fetch full paper details
+        # Fetch full paper details using repository
         if sampled_ids:
-            query = """
-                SELECT 
-                    paper_id,
-                    title,
-                    abstract,
-                    authors,
-                    year,
-                    citation_count,
-                    domain,
-                    sub_domains,
-                    venue
-                FROM papers
-                WHERE paper_id = ANY($1::text[])
-            """
-            papers = await self.db.fetch(query, sampled_ids)
-
-            candidates = [dict(p) for p in papers]
+            candidates = await self.paper_repo.find_by_ids(sampled_ids)
+            candidates_list = [dict(p) for p in candidates]
             
             # Mark as from ground truth
-            for paper in candidates:
+            for paper in candidates_list:
                 paper['from_ground_truth'] = True
         else:
-            candidates = []
+            candidates_list = []
         
         logger.debug(
             "Ground truth candidates retrieved",
-            count=len(candidates)
+            count=len(candidates_list)
         )
         
-        return candidates
+        return candidates_list
+
     
     async def _retrieve_citation_network_candidates(
         self,
@@ -1409,6 +1332,7 @@ class RecommendationService:
     ) -> List[Dict]:
         """
         Retrieve papers liked by similar users (collaborative filtering).
+        Uses UserRepository - NO SQL HERE.
         """
         logger.debug(
             "Retrieving collaborative candidates",
@@ -1417,32 +1341,13 @@ class RecommendationService:
             limit=limit
         )
         
-        # Map model to table name
-        table_map = {
-            'all-MiniLM-L6-v2': 'user_embeddings_minilm',
-            'minilm': 'user_embeddings_minilm',
-            'specter': 'user_embeddings_specter',
-            'specter2': 'user_embeddings_specter'
-        }
-        
-        embedding_table = table_map.get(model, 'user_embeddings_minilm')
-        
-        # FIX: Convert embedding to proper PostgreSQL vector format
-        # Use the embedding list directly, not as string
-        embedding_list = user_embedding.tolist()
-        
-        query = f"""
-            SELECT 
-                user_id,
-                1 - (embedding <=> $1::vector) as similarity
-            FROM {embedding_table}
-            WHERE user_id != $2
-            ORDER BY embedding <=> $1::vector
-            LIMIT 10
-        """
-        
-        # Pass as list, PostgreSQL will handle conversion
-        similar_users = await self.db.fetch(query, embedding_list, user_id)
+        # Find similar users using repository
+        similar_users = await self.user_repo.find_similar_users(
+            user_embedding=user_embedding,
+            model=model,
+            current_user_id=user_id,
+            limit=10
+        )
         
         if not similar_users:
             logger.debug("No similar users found", user_id=user_id)
@@ -1450,35 +1355,18 @@ class RecommendationService:
         
         similar_user_ids = [u['user_id'] for u in similar_users]
         
-        # Get papers saved by similar users
-        query = """
-            SELECT DISTINCT paper_id
-            FROM user_saved_papers
-            WHERE user_id = ANY($1::int[])
-            AND paper_id NOT IN (
-                SELECT paper_id FROM user_saved_papers WHERE user_id = $2
-            )
-            LIMIT $3
-        """
-        
-        paper_ids = await self.db.fetch(query, similar_user_ids, user_id, limit)
+        # Get papers saved by similar users using repository
+        paper_ids = await self.user_repo.get_papers_saved_by_users(
+            user_ids=similar_user_ids,
+            exclude_user_id=user_id,
+            limit=limit
+        )
         
         if not paper_ids:
             return []
         
-        # Fetch full details
-        query = """
-            SELECT paper_id, title, abstract, authors, year,
-                citation_count, domain, sub_domains, venue
-            FROM papers
-            WHERE paper_id = ANY($1::text[])
-        """
-        
-        papers = await self.db.fetch(
-            query,
-            [p['paper_id'] for p in paper_ids]
-        )
-        
+        # Fetch full details using repository
+        papers = await self.paper_repo.find_by_ids(paper_ids)
         candidates = [dict(p) for p in papers]
         
         logger.debug(
@@ -1497,14 +1385,7 @@ class RecommendationService:
     ) -> List[Dict]:
         """
         Retrieve recent papers in user's domain/sub-domains.
-        
-        Args:
-            domain: Primary domain
-            sub_domains: User's sub-domains
-            limit: Number of papers
-            
-        Returns:
-            List of recent papers
+        Uses PaperRepository - NO SQL HERE.
         """
         logger.debug(
             "Retrieving temporal candidates",
@@ -1513,20 +1394,13 @@ class RecommendationService:
             limit=limit
         )
         
-        # Get papers from last 6 months
-        query = """
-            SELECT paper_id, title, abstract, authors, year,
-                   citation_count, domain, sub_domains, venue
-            FROM papers
-            WHERE domain = $1
-              AND year >= EXTRACT(YEAR FROM CURRENT_DATE) - 1
-              AND citation_count >= 5
-            ORDER BY citation_count DESC
-            LIMIT $2
-        """
-        
-        papers = await self.db.fetch(query, domain, limit)
-        candidates = [dict(p) for p in papers]
+        # Use repository method
+        candidates = await self.paper_repo.get_recent_papers_in_domain(
+            domain=domain,
+            years_back=1,
+            min_citations=5,
+            limit=limit
+        )
         
         logger.debug(
             "Temporal candidates retrieved",
@@ -1982,6 +1856,7 @@ class RecommendationService:
     ) -> List[str]:
         """
         Find ground truth papers relevant to user's interests.
+        Uses GroundTruthRepository - NO SQL HERE.
         
         Args:
             user_interests: User's interest rows (with 'interest_term')
@@ -1992,25 +1867,14 @@ class RecommendationService:
         """
         interest_terms = [i['interest_term'] for i in user_interests]
         
-        # Build ILIKE patterns
-        conditions = ' OR '.join([
-            f"p.title ILIKE '%{term}%' OR p.abstract ILIKE '%{term}%'"
-            for term in interest_terms
-        ])
+        # Use repository method
+        paper_ids = await self.gt_repo.find_relevant_ground_truth_papers(
+            interest_terms=interest_terms,
+            domain=domain,
+            limit=10
+        )
         
-        query = f"""
-            SELECT p.paper_id
-            FROM papers p
-            INNER JOIN ground_truth_papers gtp ON p.paper_id = gtp.paper_id
-            WHERE p.domain = $1
-              AND ({conditions})
-            LIMIT 10
-        """
-        print(f"GT interest query: {query}")
-        results = await self.db.fetch(query, domain)
-        print(f"GT interest results: {results}")
-        
-        return [r['paper_id'] for r in results]
+        return paper_ids
     
     async def _apply_diversity_filtering(
         self,
@@ -2231,17 +2095,11 @@ class RecommendationService:
         return enriched
     
     async def _get_user_saved_papers(self, user_id: int) -> List[Dict]:
-        """Get papers user has saved."""
-        query = """
-            SELECT p.*
-            FROM papers p
-            JOIN user_saved_papers usp ON p.paper_id = usp.paper_id
-            WHERE usp.user_id = $1
-            ORDER BY usp.saved_at DESC
         """
-        
-        results = await self.db.fetch(query, user_id)
-        return [dict(r) for r in results]
+        Get papers user has saved.
+        Uses UserRepository - NO SQL HERE.
+        """
+        return await self.user_repo.get_saved_papers_list(user_id)
     
     async def _filter_seen_papers(
         self,
@@ -2250,23 +2108,13 @@ class RecommendationService:
     ) -> List[Dict]:
         """
         Remove papers user has already interacted with.
-        
-        Args:
-            candidates: Candidate papers
-            user_id: User identifier
-            
-        Returns:
-            Filtered candidates
+        Uses InteractionRepository - NO SQL HERE.
         """
-        # Get all paper IDs user has interacted with
-        query = """
-            SELECT DISTINCT paper_id
-            FROM user_interactions
-            WHERE user_id = $1
-        """
+        # Get seen paper IDs from repository
+        from app.db.repositories.interaction_repo import InteractionRepository
+        interaction_repo = InteractionRepository(self.db)
         
-        seen_papers = await self.db.fetch(query, user_id)
-        seen_ids = set([p['paper_id'] for p in seen_papers])
+        seen_ids = set(await interaction_repo.get_seen_paper_ids(user_id))
         
         # Filter out seen papers
         filtered = [p for p in candidates if p['paper_id'] not in seen_ids]

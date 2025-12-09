@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251208-210230",
+  "user_id": 14,
+  "timestamp": "2025-12-08T21:05:01.858305",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "c4c93dc9d8264fb59e5123835eb9092226f47339",
+      "title": "Quantum variational learning for quantum error-correcting codes",
+      "relevance_score": 0.39
+    },
+    {
+      "paper_id": "57a0fa1dbbc1fb122ca597a3366efeece630b38e",
+      "title": "Accelerating Variational Quantum Algorithms Using Circuit Concurrency",
+      "relevance_score": 0.385
+    },
+    {
+      "paper_id": "c1cf657d1e13149ee575b5ca779e898938ada60a",
+      "title": "Variational quantum algorithms",
+      "relevance_score": 0.38
+    },
+    {
+      "paper_id": "6e4f193cfd64d12a5d2444f2fe0914e571f2be8d",
+      "title": "Quantum circuit architecture search: error mitigation and trainability enhancement for variational quantum solvers",
+      "relevance_score": 0.379
+    },
+    {
+      "paper_id": "e2e7d964c09e27d334fcb8761d69918630629387",
+      "title": "Near-term quantum computing techniques: Variational quantum algorithms, error mitigation, circuit compilation, benchmarking and classical simulation",
+      "relevance_score": 0.377
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "163b4d6a79a5b19af88b8585456363340d9efd04",
+      "title": "GPT-4 Technical Report",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "cb004c1bd6796118879563b226def1973c41531c",
+      "title": "Cancer statistics, 2023",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "2fc7d040b64164126f0a56cf1562c7659bc2b146",
+      "title": "The quantum theory of light",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "c62de1db876c3c85963f0a1e53f8516d38c62953",
+      "title": "On the Road to 6G: Visions, Requirements, Key Technologies, and Testbeds",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "9cac672bb24d6216c2b5728f940e69395d188bdd",
+      "title": "Logical quantum processor based on reconfigurable atom arrays",
+      "relevance_score": null
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "c4c93dc9d8264fb59e5123835eb9092226f47339",
+      "paper_title": "Quantum variational learning for quantum error-correcting co...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:04:43.121601"
+    },
+    {
+      "number": 2,
+      "paper_id": "57a0fa1dbbc1fb122ca597a3366efeece630b38e",
+      "paper_title": "Accelerating Variational Quantum Algorithms Using Circuit Co...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:04:44.159388"
+    },
+    {
+      "number": 3,
+      "paper_id": "c1cf657d1e13149ee575b5ca779e898938ada60a",
+      "paper_title": "Variational quantum algorithms...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:04:45.293252"
+    },
+    {
+      "number": 4,
+      "paper_id": "6e4f193cfd64d12a5d2444f2fe0914e571f2be8d",
+      "paper_title": "Quantum circuit architecture search: error mitigation and tr...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:04:46.622000"
+    },
+    {
+      "number": 5,
+      "paper_id": "e2e7d964c09e27d334fcb8761d69918630629387",
+      "paper_title": "Near-term quantum computing techniques: Variational quantum ...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:04:48.100446"
+    },
+    {
+      "number": 6,
+      "paper_id": "706c9084cda18c3e8eef4ada1d5deb6eeb31d1c6",
+      "paper_title": "Approximating the Quantum Approximate Optimisation Algorithm...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:04:49.785881"
+    },
+    {
+      "number": 7,
+      "paper_id": "01ae91910617857b9a4f9786bc9b760c8271ba45",
+      "paper_title": "Clifford Circuit Initialisation for Variational Quantum Algo...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:04:51.221408"
+    },
+    {
+      "number": 8,
+      "paper_id": "01bb6447083a6a87b02f59f9d35477d9e6a6a1b6",
+      "paper_title": "Classically Optimal Variational Quantum Algorithms...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-08T21:04:52.712461"
+    },
+    {
+      "number": 9,
+      "paper_id": "baf57a351f78f5bb4706166f6167c6335982451c",
+      "paper_title": "Classification of the Fashion-MNIST Dataset on a Quantum Com...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-08T21:04:54.204235"
+    },
+    {
+      "number": 10,
+      "paper_id": "4899e5bcd5db26c682c16a3a81e0e814f2a670c1",
+      "paper_title": "Iteration Complexity of Variational Quantum Algorithms...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-08T21:04:55.406563"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 14,
+        "username": "synthetic_postdoc_quantum@seed.local",
+        "interaction_count": 15,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-11-30T01:06:18.844042",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "quantum error correction",
+          "quantum hardware",
+          "variational circuits"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 14,
+        "username": "synthetic_postdoc_quantum@seed.local",
+        "interaction_count": 25,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-11-30T01:06:18.844042",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "quantum error correction",
+          "quantum hardware",
+          "variational circuits"
+        ]
+      }
+    }
+  ]
+}

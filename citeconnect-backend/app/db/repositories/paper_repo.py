@@ -571,7 +571,6 @@ class PaperRepository(BaseRepository):
                 exc_info=True
             )
             raise        
-
     async def _get_paper_embeddings(
         self,
         paper_ids: List[str],

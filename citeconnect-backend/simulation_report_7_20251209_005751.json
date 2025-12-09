@@ -1,0 +1,179 @@
+{
+  "simulation_id": "simulation-20251209-005530",
+  "user_id": 7,
+  "timestamp": "2025-12-09T00:57:51.893144",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "5425de16356015c2f26d2a50684c6c46d6998f51",
+      "title": "MIMIC-IV, a freely accessible electronic health record dataset",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "381ab7a640f5b46b62f7e08d1af4a8e0d3eadd55",
+      "title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignment",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "5cde474869cb230a29b3ba0f6f685f5162b1a1a1",
+      "title": "Revolutionizing healthcare: the role of artificial intelligence in clinical practice",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7dc6da87eaa6f830354feb2db14023cab8678c91",
+      "title": "ImageBind One Embedding Space to Bind Them All",
+      "relevance_score": null
+    },
+    {
+      "paper_id": "7b72711ac2ea7bd7f519cac162a4a6578bbb7d0d",
+      "title": "ARTIFICIAL INTELLIGENCE FOR THE REAL WORLD",
+      "relevance_score": null
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "c749e8f2375a1930f54be5559f077f3c1506d895",
+      "title": "Deep learning and alternative learning strategies for retrospective real-world clinical data",
+      "relevance_score": 0.411
+    },
+    {
+      "paper_id": "a285f16e43301d8016e5de8ee2efb0162771863e",
+      "title": "Deep Learning for Drug Discovery: A Study of Identifying High Efficacy Drug Compounds Using a Cascade Transfer Learning Approach",
+      "relevance_score": 0.397
+    },
+    {
+      "paper_id": "a5db1b3656e4413b3206cc04e6abac494c3144a7",
+      "title": "A Review: Heart Disease Prediction in Machine Learning & Deep Learning",
+      "relevance_score": 0.395
+    },
+    {
+      "paper_id": "6ac88a018062fa368e15494e915ec1b597b3526c",
+      "title": "Challenges and opportunities beyond structured data in analysis of electronic health records",
+      "relevance_score": 0.395
+    },
+    {
+      "paper_id": "fb42a3d55670981679dab08fabedb49ded11bca3",
+      "title": "Machine Learning for Multimodal Electronic Health Records-based Research: Challenges and Perspectives",
+      "relevance_score": 0.393
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "5425de16356015c2f26d2a50684c6c46d6998f51",
+      "paper_title": "MIMIC-IV, a freely accessible electronic health record datas...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T00:57:30.342593"
+    },
+    {
+      "number": 2,
+      "paper_id": "381ab7a640f5b46b62f7e08d1af4a8e0d3eadd55",
+      "paper_title": "G-Eval: NLG Evaluation using GPT-4 with Better Human Alignme...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T00:57:31.423764"
+    },
+    {
+      "number": 3,
+      "paper_id": "5cde474869cb230a29b3ba0f6f685f5162b1a1a1",
+      "paper_title": "Revolutionizing healthcare: the role of artificial intellige...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T00:57:32.583051"
+    },
+    {
+      "number": 4,
+      "paper_id": "7dc6da87eaa6f830354feb2db14023cab8678c91",
+      "paper_title": "ImageBind One Embedding Space to Bind Them All...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:57:33.785859"
+    },
+    {
+      "number": 5,
+      "paper_id": "7b72711ac2ea7bd7f519cac162a4a6578bbb7d0d",
+      "paper_title": "ARTIFICIAL INTELLIGENCE FOR THE REAL WORLD...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:57:35.011290"
+    },
+    {
+      "number": 6,
+      "paper_id": "f2b0017ddd77fa38760a18145e63553105a1a236",
+      "paper_title": "The Flan Collection: Designing Data and Methods for Effectiv...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:57:36.194708"
+    },
+    {
+      "number": 7,
+      "paper_id": "2e965b5d97c2d6fb4af284307735be39283792ba",
+      "paper_title": "Extracting Training Data from Diffusion Models...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T00:57:37.471320"
+    },
+    {
+      "number": 8,
+      "paper_id": "e4d8de5d5d95c1075050de5bf0b19811141006bd",
+      "paper_title": "Computational approaches streamlining drug discovery...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T00:57:38.827452"
+    },
+    {
+      "number": 9,
+      "paper_id": "df70977e0347b76fb049c17c3956f643bcb43a55",
+      "paper_title": "Understanding of Machine Learning with Deep Learning: Archit...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T00:57:40.219734"
+    },
+    {
+      "number": 10,
+      "paper_id": "07be0ec1f45e21a1032616535d0290ee6bfe0f6b",
+      "paper_title": "Structure and Content-Guided Video Synthesis with Diffusion ...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T00:57:41.360223"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 30,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T02:21:11.708116",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 40,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T05:57:41.338201",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    }
+  ]
+}

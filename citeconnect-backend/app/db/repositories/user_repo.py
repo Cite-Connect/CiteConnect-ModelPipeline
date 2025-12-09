@@ -814,38 +814,167 @@ class UserRepository(BaseRepository):
                 new_stage,
                 user_id
             )
+    # ============================================================================
+# Add these methods to app/db/repositories/user_repo.py
+# ============================================================================
 
-    async def find_by_id(self, user_id: int) -> Optional[asyncpg.Record]:
+    async def save_paper(
+        self,
+        user_id: int,
+        paper_id: str,
+        notes: Optional[str] = None
+    ) -> None:
         """
-        Find user by user_id.
+        Save a paper for the user.
         
         Args:
             user_id: User identifier
+            paper_id: Paper identifier
+            notes: Optional notes
+        """
+        query = """
+            INSERT INTO user_saved_papers (user_id, paper_id, saved_at, notes)
+            VALUES ($1, $2, NOW(), $3)
+            ON CONFLICT (user_id, paper_id) DO NOTHING
+        """
+        
+        await self.db.execute(query, user_id, paper_id, notes)
+        
+        logger.info(
+            "Paper saved",
+            user_id=user_id,
+            paper_id=paper_id
+        )
+
+
+    async def like_paper(
+        self,
+        user_id: int,
+        paper_id: str
+    ) -> None:
+        """
+        Like a paper for the user.
+        
+        Args:
+            user_id: User identifier
+            paper_id: Paper identifier
+        """
+        query = """
+            INSERT INTO user_liked_papers (user_id, paper_id, liked_at)
+            VALUES ($1, $2, NOW())
+            ON CONFLICT (user_id, paper_id) DO NOTHING
+        """
+        
+        await self.db.execute(query, user_id, paper_id)
+        
+        logger.info(
+            "Paper liked",
+            user_id=user_id,
+            paper_id=paper_id
+        )
+
+
+    async def get_saved_papers_list(
+        self,
+        user_id: int,
+        limit: Optional[int] = None
+    ) -> List[Dict]:
+        """
+        Get list of papers user has saved.
+        
+        Args:
+            user_id: User identifier
+            limit: Optional limit
             
         Returns:
-            Optional[Record]: User record or None
+            List of saved paper details
         """
-        logger.debug("Finding user by ID", user_id=user_id)
-        
         query = """
-            SELECT user_id, email, name, is_active, created_at, updated_at
-            FROM users
-            WHERE user_id = $1
+            SELECT p.*
+            FROM papers p
+            JOIN user_saved_papers usp ON p.paper_id = usp.paper_id
+            WHERE usp.user_id = $1
+            ORDER BY usp.saved_at DESC
         """
         
-        try:
-            result = await self.db.fetchrow(query, user_id)
-            logger.debug(
-                "User ID lookup complete",
-                user_id=user_id,
-                found=result is not None
+        if limit:
+            query += f" LIMIT {limit}"
+        
+        results = await self.db.fetch(query, user_id)
+        return [dict(r) for r in results]
+
+
+    async def find_similar_users(
+        self,
+        user_embedding: np.ndarray,
+        model: str,
+        current_user_id: int,
+        limit: int = 10
+    ) -> List[Dict]:
+        """
+        Find users with similar embeddings (for collaborative filtering).
+        
+        Args:
+            user_embedding: Current user's embedding
+            model: Model name ('minilm' or 'specter')
+            current_user_id: Current user to exclude
+            limit: Number of similar users
+            
+        Returns:
+            List of similar users with similarity scores
+        """
+        table_map = {
+            'all-MiniLM-L6-v2': 'user_embeddings_minilm',
+            'minilm': 'user_embeddings_minilm',
+            'specter': 'user_embeddings_specter',
+            'specter2': 'user_embeddings_specter'
+        }
+        
+        embedding_table = table_map.get(model, 'user_embeddings_minilm')
+        embedding_list = user_embedding.tolist()
+        
+        query = f"""
+            SELECT 
+                user_id,
+                1 - (embedding <=> $1::vector) as similarity
+            FROM {embedding_table}
+            WHERE user_id != $2
+            ORDER BY embedding <=> $1::vector
+            LIMIT $3
+        """
+        
+        results = await self.db.fetch(query, embedding_list, current_user_id, limit)
+        return [dict(r) for r in results]
+
+
+    async def get_papers_saved_by_users(
+        self,
+        user_ids: List[int],
+        exclude_user_id: int,
+        limit: int
+    ) -> List[str]:
+        """
+        Get paper IDs saved by a list of users (for collaborative filtering).
+        
+        Args:
+            user_ids: List of user IDs
+            exclude_user_id: User to exclude
+            limit: Max papers to return
+            
+        Returns:
+            List of paper IDs
+        """
+        query = """
+            SELECT DISTINCT paper_id
+            FROM user_saved_papers
+            WHERE user_id = ANY($1::int[])
+            AND paper_id NOT IN (
+                SELECT paper_id FROM user_saved_papers WHERE user_id = $2
             )
-            return result
-        except Exception as e:
-            logger.error(
-                "User ID lookup failed",
-                user_id=user_id,
-                error=str(e),
-                exc_info=True
-            )
-            raise        
+            LIMIT $3
+        """
+        
+        results = await self.db.fetch(query, user_ids, exclude_user_id, limit)
+        return [r['paper_id'] for r in results]
+
+    
