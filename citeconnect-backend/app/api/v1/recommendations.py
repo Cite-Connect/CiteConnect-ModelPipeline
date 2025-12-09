@@ -146,11 +146,7 @@ async def get_recommendation_history(
 ):
     """
     Get user's recommendation history.
-<<<<<<< HEAD
-    User can only view their own history.
-=======
     Uses InteractionRepository - NO SQL HERE.
->>>>>>> 03b58cd (updated warm start recommendation)
     """
     
     # Verify user is accessing their own history
