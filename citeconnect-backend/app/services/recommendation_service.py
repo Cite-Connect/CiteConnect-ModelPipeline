@@ -500,7 +500,60 @@ class RecommendationService:
             avg_score=np.mean([p['keyword_score'] for p in keyword_results]) if keyword_results else 0
         )
         
-        # ────────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────
+        # PHASE 0: LLM Query Refinement (NEW)
+        # ────────────────────────────────────────────────────────
+        logger.info(
+            "Phase 0: LLM query refinement",
+            search_query=search_query,
+            search_query_type=type(search_query).__name__,
+            search_query_len=len(search_query) if search_query else 0
+        )
+        
+        refined_query = search_query  # Default to original query
+        llm_refinement_used = False
+        
+        try:
+            from app.services.llm_service import get_llm_service
+            llm_service = get_llm_service()
+            
+            logger.info(
+                "LLM service status",
+                enabled=llm_service.enabled,
+                api_key_set=bool(llm_service.api_key),
+                model=llm_service.model_name
+            )
+            
+            if llm_service.enabled:
+                # Refine query using LLM
+                refined_query = await llm_service.refine_search_query(
+                    query=search_query,
+                    user_profile=profile,
+                    user_interests=[i['interest_term'] for i in interests]
+                )
+                
+                if refined_query != search_query:
+                    llm_refinement_used = True
+                    logger.info(
+                        "Query refined with LLM",
+                        original_query=search_query[:50],
+                        refined_query=refined_query[:50],
+                        model=llm_service.model_name
+                    )
+                else:
+                    logger.debug("LLM refinement returned original query (fallback)")
+            else:
+                logger.debug("LLM service disabled - using original query")
+        except Exception as e:
+            logger.warning(
+                "LLM query refinement failed - using original query",
+                error=str(e),
+                exc_info=True
+            )
+            # Fallback to original query on any error
+            refined_query = search_query
+        
+        # ────────────────────────────────────────────────────────
         # PHASE 2: Semantic Search (Contextual)
         # ────────────────────────────────────────────────────────────
         logger.debug("Phase 2: Semantic search")
@@ -509,9 +562,9 @@ class RecommendationService:
         from app.services.bootstrap.embedding_service import get_embedding_service
         embedding_service = get_embedding_service()
         
-        # Generate query embedding
+        # Generate query embedding using REFINED query (not original)
         query_embedding = embedding_service.encode_text(
-            text=search_query,
+            text=refined_query,  # Use refined query for semantic search
             model=embedding_key,
             normalize=True
         )
@@ -720,7 +773,9 @@ class RecommendationService:
             'user_id': user_id,
             'papers': fairness_reranked,
             'method': 'search_augmented',
-            'search_query': search_query,
+            'search_query': search_query,  # Original query
+            'refined_query': refined_query if llm_refinement_used else None,  # Refined query (if used)
+            'llm_refinement_used': llm_refinement_used,
             'model_used': model,
             'scoring_weights': weights,
             'generated_at': datetime.utcnow().isoformat(),

@@ -281,6 +281,16 @@ class Settings(BaseSettings):
         description="OpenAI API key for LLM operations"
     )
     
+    GEMINI_API_KEY: Optional[str] = Field(
+        default=None,
+        description="Google Gemini API key for query refinement"
+    )
+    
+    GEMINI_MODEL: str = Field(
+        default="gemini-1.5-flash",
+        description="Gemini model to use (gemini-1.5-flash or gemini-1.5-pro)"
+    )
+    
     # ==================== SPECTER Model Settings ====================
     
     SPECTER_MODEL_NAME: str = Field(
