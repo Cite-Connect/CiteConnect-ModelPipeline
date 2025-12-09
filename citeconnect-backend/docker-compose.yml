@@ -81,7 +81,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: celery -A workers.celery_app worker --loglevel=info
+    command: celery -A app.tasks.celery_app worker -l info
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - SUPABASE_URL=${SUPABASE_URL}
@@ -102,7 +102,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    command: celery -A workers.celery_app flower --port=5555
+    command: celery -A app.tasks.celery_app flower --port=5555
     ports:
       - "5555:5555"
     environment:
