@@ -14,10 +14,6 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
-    defaults:
-      run:
-        working-directory: citeconnect-backend
-
     strategy:
       matrix:
         python-version: ['3.11']
@@ -36,12 +32,12 @@ jobs:
           requirements-dev.txt
 
     - name: Install dependencies
-      working-directory: citeconnect-backend
+      working-directory: .
       run: |
         python -m pip install --upgrade pip
-        pip install -r requirements.txt
-        if [ -f ../requirements-dev.txt ]; then
-          pip install -r ../requirements-dev.txt
+        pip install -r citeconnect-backend/requirements.txt
+        if [ -f requirements-dev.txt ]; then
+          pip install -r requirements-dev.txt
         fi
 
     - name: Run all tests from tests folder
@@ -50,7 +46,6 @@ jobs:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
         ENVIRONMENT: test
       run: |
-        cd ..
         echo "Running tests from citeconnect-backend/tests/ directory"
         echo "This includes:"
         echo "  - tests/test_api/ (API endpoint tests)"
@@ -86,10 +81,6 @@ jobs:
     needs: test
     continue-on-error: true
 
-    defaults:
-      run:
-        working-directory: citeconnect-backend
-
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
@@ -101,6 +92,7 @@ jobs:
         cache: 'pip'
 
     - name: Install bias detection dependencies
+      working-directory: citeconnect-backend
       run: |
         python -m pip install --upgrade pip
         pip install pandas numpy asyncpg python-dotenv matplotlib
@@ -109,6 +101,7 @@ jobs:
       id: user_bias
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+      working-directory: citeconnect-backend
       run: |
         echo "=================================================="
         echo "  Running User-Profile Bias Detection"
@@ -132,6 +125,7 @@ jobs:
     - name: Run Paper-Field Bias Detection
       id: field_bias
       continue-on-error: true
+      working-directory: citeconnect-backend
       run: |
         echo ""
         echo "=================================================="
