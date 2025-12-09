@@ -31,6 +31,9 @@ jobs:
       with:
         python-version: ${{ matrix.python-version }}
         cache: 'pip'
+        cache-dependency-path: |
+          citeconnect-backend/requirements.txt
+          requirements-dev.txt
 
     - name: Install dependencies
       working-directory: .
