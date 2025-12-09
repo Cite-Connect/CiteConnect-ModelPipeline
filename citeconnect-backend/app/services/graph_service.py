@@ -1,16 +1,18 @@
 """
 Citation Graph Service
 Generates citation network data for frontend visualization.
+Supports dual embedding models (MiniLM and SPECTER) for semantic fallback.
 """
 
 from typing import Dict, List, Optional, Set
 from app.db.connection import DatabaseConnection
 from app.db.repositories.ground_truth_repo import GroundTruthRepository
 from app.db.repositories.paper_repo import PaperRepository
-import structlog
 from app.config import settings
+import structlog
 
 logger = structlog.get_logger()
+
 
 class GraphService:
     """Service for generating citation graph data with semantic fallback."""
@@ -41,7 +43,8 @@ class GraphService:
         depth: int = 1,
         max_nodes: int = 50,
         include_metadata: bool = True,
-        embedding_model: str = None  # NEW: 'minilm' or 'specter'
+        embedding_model: str = None,
+        recommended_papers: List[str] = None
     ) -> Dict:
         """
         Generate citation graph for a paper.
@@ -52,6 +55,7 @@ class GraphService:
             max_nodes: Maximum nodes to include
             include_metadata: Include paper metadata in nodes
             embedding_model: Model for semantic similarity ('minilm' or 'specter')
+            recommended_papers: List of paper IDs from same recommendation batch
             
         Returns:
             Graph data in format ready for D3.js/Cytoscape/vis.js
@@ -73,7 +77,8 @@ class GraphService:
             paper_id=paper_id,
             depth=depth,
             max_nodes=max_nodes,
-            embedding_model=embedding_model
+            embedding_model=embedding_model,
+            recommended_peers=len(recommended_papers) if recommended_papers else 0
         )
         
         # Get ground truth relationships for the paper
@@ -83,7 +88,13 @@ class GraphService:
         
         if not gt_relationships:
             # Fall back to basic citation/reference data
-            return await self._build_basic_graph(paper_id, depth, max_nodes)
+            return await self._build_basic_graph(
+                paper_id, 
+                depth, 
+                max_nodes,
+                embedding_model,
+                recommended_papers
+            )
         
         # Build graph from ground truth relationships
         nodes = {}
@@ -227,6 +238,27 @@ class GraphService:
                     exc_info=True
                 )
         
+        # NEW: Add recommended peer papers (if provided)
+        if recommended_papers and len(recommended_papers) > 0:
+            try:
+                logger.info(
+                    "Adding recommended peer papers",
+                    peers=len(recommended_papers)
+                )
+                await self._add_recommended_peers(
+                    nodes,
+                    edges,
+                    paper_id,
+                    recommended_papers,
+                    embedding_model
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to add recommended peers",
+                    error=str(e),
+                    exc_info=True
+                )
+        
         # Calculate graph statistics
         stats = self._calculate_graph_stats(nodes, edges, gt_relationships)
         
@@ -256,13 +288,25 @@ class GraphService:
         self,
         paper_id: str,
         depth: int,
-        max_nodes: int
+        max_nodes: int,
+        embedding_model: str = None,
+        recommended_papers: List[str] = None
     ) -> Dict:
         """
         Fallback: Build basic graph from paper citations/references.
         Used when ground truth relationships don't exist.
+        NOW SUPPORTS: Semantic fallback + recommended peers!
         """
-        logger.debug("Building basic citation graph", paper_id=paper_id)
+        # Set default model if not provided
+        if embedding_model is None:
+            embedding_model = self.default_model
+        
+        logger.debug(
+            "Building basic citation graph with fallback features",
+            paper_id=paper_id,
+            embedding_model=embedding_model,
+            recommended_peers=len(recommended_papers) if recommended_papers else 0
+        )
         
         nodes = {}
         edges = []
@@ -320,10 +364,76 @@ class GraphService:
                     })
                     visited.add(cite_id)
         
+        # NEW: Add semantic fallback if sparse
+        if len(nodes) < self.hybrid_threshold:
+            logger.info(
+                "Basic graph sparse, triggering semantic fallback",
+                current_nodes=len(nodes),
+                threshold=self.hybrid_threshold
+            )
+            
+            try:
+                hybrid_result = await self._build_hybrid_graph(
+                    paper_id,
+                    list(nodes.values()),
+                    edges,
+                    max_nodes,
+                    embedding_model
+                )
+                nodes = {n['id']: n for n in hybrid_result['nodes']}
+                edges = hybrid_result['edges']
+            except Exception as e:
+                logger.error(
+                    "Semantic fallback failed in basic graph",
+                    error=str(e),
+                    exc_info=True
+                )
+        
+        # NEW: Add recommended peers if provided
+        if recommended_papers and len(recommended_papers) > 0:
+            try:
+                logger.info("Adding recommended peers to basic graph")
+                await self._add_recommended_peers(
+                    nodes,
+                    edges,
+                    paper_id,
+                    recommended_papers,
+                    embedding_model
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to add peers to basic graph",
+                    error=str(e),
+                    exc_info=True
+                )
+        
+        # NEW: Add semantic bridges if enough nodes
+        if len(nodes) > 3:
+            try:
+                logger.info("Adding semantic bridges to basic graph")
+                edges = await self._add_semantic_bridges(
+                    nodes,
+                    edges,
+                    embedding_model,
+                    max_bridges=20
+                )
+            except Exception as e:
+                logger.error(
+                    "Failed to add bridges to basic graph",
+                    error=str(e),
+                    exc_info=True
+                )
+        
         stats = {
-            'total_citations': len(citations),
-            'total_references': len(references),
-            'network_centrality': 0.0
+            'total_nodes': len(nodes),
+            'total_edges': len(edges),
+            'direct_citations': sum(1 for e in edges if e['type'] == 'cites'),
+            'co_citations': 0,
+            'bibliographic_couples': 0,
+            'network_centrality': 0.0,
+            'avg_citation_count': sum(
+                n.get('citation_count', 0) for n in nodes.values()
+            ) / len(nodes) if nodes else 0
         }
         
         return {
@@ -334,7 +444,11 @@ class GraphService:
                 'central_paper_id': paper_id,
                 'depth': depth,
                 'total_nodes': len(nodes),
-                'total_edges': len(edges)
+                'total_edges': len(edges),
+                'has_semantic_fallback': any(
+                    n['type'] == 'semantic_similar' for n in nodes.values()
+                ),
+                'embedding_model_used': embedding_model
             }
         }
     
@@ -401,7 +515,8 @@ class GraphService:
             'bibliographic_couple': '#FFE66D',  # Yellow
             'reference': '#6C5CE7',         # Purple
             'citation': '#74B9FF',          # Light blue
-            'semantic_similar': '#A8E6CF'   # Mint green - NEW!
+            'semantic_similar': '#A8E6CF',  # Mint green
+            'recommended_peer': '#FFD93D'   # Gold - NEW!
         }
         return color_map.get(node_type, '#95A5A6')  # Gray default
     
@@ -922,6 +1037,8 @@ class GraphService:
             base = 100
         elif edge_type == 'semantic_bridge':
             base = 130
+        elif edge_type == 'co_recommended':
+            base = 95  # Recommended peers close to central
         else:
             base = 100
         
@@ -931,3 +1048,156 @@ class GraphService:
         multiplier = 2.0 - strength
         
         return int(base * multiplier)
+    
+    async def _add_recommended_peers(
+        self,
+        nodes: Dict,
+        edges: List[Dict],
+        central_paper_id: str,
+        recommended_papers: List[str],
+        embedding_model: str
+    ) -> None:
+        """
+        Add other recommended papers as peer nodes in the graph.
+        Shows how the selected paper relates to other recommendations.
+        
+        Args:
+            nodes: Graph nodes (dict of paper_id -> node)
+            edges: Existing edges
+            central_paper_id: The selected paper
+            recommended_papers: Other papers from recommendation batch
+            embedding_model: Model to use for similarity calculation
+        """
+        logger.debug(
+            "Adding recommended peers",
+            central=central_paper_id,
+            peers=len(recommended_papers)
+        )
+        
+        peers_added = 0
+        
+        for peer_id in recommended_papers:
+            # Skip central paper and already-added nodes
+            if peer_id == central_paper_id or peer_id in nodes:
+                continue
+            
+            try:
+                # Fetch peer paper data
+                peer_paper = await self.paper_repo.find_by_paper_id(peer_id)
+                if not peer_paper:
+                    logger.warning("Recommended peer not found", peer_id=peer_id)
+                    continue
+                
+                # Add as peer node
+                nodes[peer_id] = self._create_node(
+                    peer_paper,
+                    node_type='recommended_peer',
+                    metadata=True
+                )
+                
+                # Calculate similarity between central and peer
+                try:
+                    similarity = await self._get_pairwise_similarity(
+                        central_paper_id,
+                        peer_id,
+                        embedding_model
+                    )
+                except Exception as e:
+                    logger.warning(
+                        "Failed to calculate peer similarity, using default",
+                        central=central_paper_id,
+                        peer=peer_id,
+                        error=str(e)
+                    )
+                    similarity = 0.6  # Default
+                
+                # Add edge
+                edges.append({
+                    'source': central_paper_id,
+                    'target': peer_id,
+                    'type': 'co_recommended',
+                    'strength': similarity if similarity else 0.6,
+                    'label': 'recommended together',
+                    'distance': self._calculate_edge_distance(
+                        similarity if similarity else 0.6,
+                        'co_recommended'
+                    )
+                })
+                
+                peers_added += 1
+                
+            except Exception as e:
+                logger.error(
+                    "Failed to add recommended peer",
+                    peer_id=peer_id,
+                    error=str(e),
+                    exc_info=True
+                )
+                continue
+        
+        logger.info(
+            "Recommended peers added",
+            total_added=peers_added,
+            total_requested=len(recommended_papers)
+        )
+    
+    async def _get_pairwise_similarity(
+        self,
+        paper_id_1: str,
+        paper_id_2: str,
+        embedding_model: str
+    ) -> Optional[float]:
+        """
+        Calculate semantic similarity between two specific papers.
+        
+        Args:
+            paper_id_1: First paper
+            paper_id_2: Second paper
+            embedding_model: Embedding model to use
+            
+        Returns:
+            Cosine similarity score (0-1) or None if embeddings missing
+        """
+        model_config = self.embedding_models.get(embedding_model)
+        if not model_config:
+            return None
+        
+        table = model_config['table']
+        
+        query = f"""
+            WITH paper1_emb AS (
+                SELECT embedding FROM {table} WHERE paper_id = $1
+            ),
+            paper2_emb AS (
+                SELECT embedding FROM {table} WHERE paper_id = $2
+            )
+            SELECT 
+                1 - (
+                    (SELECT embedding FROM paper1_emb) <=> 
+                    (SELECT embedding FROM paper2_emb)
+                ) as similarity
+            FROM paper1_emb, paper2_emb
+        """
+        
+        try:
+            result = await self.db.fetchval(query, paper_id_1, paper_id_2)
+            
+            if result is not None:
+                logger.debug(
+                    "Pairwise similarity calculated",
+                    paper1=paper_id_1,
+                    paper2=paper_id_2,
+                    similarity=round(float(result), 3)
+                )
+                return float(result)
+            
+            return None
+            
+        except Exception as e:
+            logger.error(
+                "Pairwise similarity calculation failed",
+                paper1=paper_id_1,
+                paper2=paper_id_2,
+                error=str(e)
+            )
+            return None
