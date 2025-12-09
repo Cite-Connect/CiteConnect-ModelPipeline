@@ -111,7 +111,22 @@ jobs:
           echo "✅ User bias report generated"
           
           # Extract max disparity using Python
-          MAX_DISPARITY=$(python3 -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); findings=data.get("bias_findings",[]); print(f"{max([f[\"disparity\"] for f in findings]):.4f}" if findings else "0.0000")' 2>/dev/null || echo "0.0000")
+          MAX_DISPARITY=$(python -c "
+import json
+import sys
+try:
+    with open('bias_report_cold_start_before.json') as f:
+        data = json.load(f)
+    findings = data.get('bias_findings', [])
+    if findings:
+        max_d = max([f['disparity'] for f in findings])
+        print(f'{max_d:.4f}')
+    else:
+        print('0.0000')
+except Exception as e:
+    print('0.0000')
+    sys.stderr.write(f'Error: {e}\\n')
+")
           
           echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
           echo ""
@@ -148,7 +163,8 @@ jobs:
         if [ -f "model_bias_report.json" ]; then
           echo "✅ Field bias report generated"
           
-          FIELD_RATIO=$(python3 -c 'import json; data=json.load(open("model_bias_report.json")); fairness=data.get("fairness_summary",{}); ratio=fairness.get("precision_ratio_min_over_max",1.0) or 1.0; print(f"{ratio:.4f}")' 2>/dev/null || echo "1.0000")
+          # Extract field fairness ratio using inline Python
+          FIELD_RATIO=$(python -c "import json; data=json.load(open('model_bias_report.json')); fairness=data.get('fairness_summary',{}); ratio=fairness.get('precision_ratio_min_over_max',1.0) or 1.0; print(f'{ratio:.4f}')" 2>/dev/null || echo "1.0000")
           
           echo "field_fairness_ratio=$FIELD_RATIO" >> $GITHUB_OUTPUT
           echo "📊 Field Fairness Ratio: $FIELD_RATIO"
@@ -162,64 +178,60 @@ jobs:
         MAX_DISPARITY: ${{ steps.user_bias.outputs.max_disparity }}
         FIELD_RATIO: ${{ steps.field_bias.outputs.field_fairness_ratio }}
       run: |
-        python - <<'EOF'
-import sys
-import os
-
-max_disparity = float(os.environ.get('MAX_DISPARITY', '0'))
-field_ratio = float(os.environ.get('FIELD_RATIO', '1.0'))
-alert_threshold = 0.20  # 20%
-critical_threshold = 0.30  # 30%
-field_threshold = 0.80  # 80% - field fairness threshold
-
-print("\n" + "="*60)
-print("  BIAS DETECTION RESULTS")
-print("="*60)
-print(f"User-Profile Max Disparity: {max_disparity:.2%}")
-print(f"Field Fairness Ratio: {field_ratio:.2%}")
-print(f"Alert Threshold: {alert_threshold:.2%}")
-print(f"Critical Threshold: {critical_threshold:.2%}")
-print("="*60 + "\n")
-
-# Check user-profile bias
-user_status = "PASS"
-if max_disparity >= critical_threshold:
-    user_status = "CRITICAL"
-    print(f"🚨 USER-PROFILE BIAS: CRITICAL!")
-    print(f"   Disparity {max_disparity:.2%} >= {critical_threshold:.2%}")
-    print(f"\n⚠️  This would normally block deployment in production.")
-    print(f"   Currently set to WARNING only (non-blocking).\n")
-elif max_disparity >= alert_threshold:
-    user_status = "WARNING"
-    print(f"⚠️  USER-PROFILE BIAS: WARNING")
-    print(f"   Disparity {max_disparity:.2%} >= {alert_threshold:.2%}")
-else:
-    print(f"✅ USER-PROFILE BIAS: PASS")
-    print(f"   Disparity {max_disparity:.2%} < {alert_threshold:.2%}")
-
-print()
-
-# Check field-level fairness
-field_status = "PASS"
-if field_ratio < field_threshold:
-    field_disparity = (1 - field_ratio) * 100
-    field_status = "WARNING"
-    print(f"⚠️  FIELD-LEVEL FAIRNESS: WARNING")
-    print(f"   Best/Worst field ratio: {field_ratio:.2%}")
-    print(f"   Disparity: {field_disparity:.1f}%")
-else:
-    print(f"✅ FIELD-LEVEL FAIRNESS: PASS")
-    print(f"   Best/Worst field ratio: {field_ratio:.2%}")
-
-print("\n" + "="*60)
-
-if user_status in ["CRITICAL", "WARNING"] or field_status == "WARNING":
-    print("\n📋 Action Required:")
-    print("  1. Review bias reports in artifacts")
-    print("  2. Apply mitigation strategies")
-    print("  3. Re-run evaluation")
-    print("="*60)
-EOF
+        MAX_DISPARITY="${MAX_DISPARITY:-0}"
+        FIELD_RATIO="${FIELD_RATIO:-1.0}"
+        ALERT_THRESHOLD=0.20
+        CRITICAL_THRESHOLD=0.30
+        FIELD_THRESHOLD=0.80
+        
+        echo ""
+        echo "============================================================"
+        echo "  BIAS DETECTION RESULTS"
+        echo "============================================================"
+        echo "User-Profile Max Disparity: ${MAX_DISPARITY}"
+        echo "Field Fairness Ratio: ${FIELD_RATIO}"
+        echo "Alert Threshold: ${ALERT_THRESHOLD}"
+        echo "Critical Threshold: ${CRITICAL_THRESHOLD}"
+        echo "Field Threshold: ${FIELD_THRESHOLD}"
+        echo "============================================================"
+        echo ""
+        
+        # Check user-profile bias
+        if (( $(echo "$MAX_DISPARITY >= $CRITICAL_THRESHOLD" | bc -l) )); then
+          echo "🚨 USER-PROFILE BIAS: CRITICAL!"
+          echo "   Disparity ${MAX_DISPARITY} >= ${CRITICAL_THRESHOLD}"
+          echo ""
+          echo "⚠️  This would normally block deployment in production."
+          echo "   Currently set to WARNING only (non-blocking)."
+          echo ""
+          echo "Action required:"
+          echo "  1. Review bias reports in artifacts"
+          echo "  2. Apply mitigation strategies"
+          echo "  3. Re-run evaluation"
+        elif (( $(echo "$MAX_DISPARITY >= $ALERT_THRESHOLD" | bc -l) )); then
+          echo "⚠️  USER-PROFILE BIAS: WARNING"
+          echo "   Disparity ${MAX_DISPARITY} >= ${ALERT_THRESHOLD}"
+          echo ""
+          echo "Recommendation: Monitor and consider mitigation"
+        else
+          echo "✅ USER-PROFILE BIAS: PASS"
+          echo "   Disparity ${MAX_DISPARITY} < ${ALERT_THRESHOLD}"
+        fi
+        
+        echo ""
+        
+        # Check field-level fairness
+        if (( $(echo "$FIELD_RATIO < $FIELD_THRESHOLD" | bc -l) )); then
+          echo "⚠️  FIELD-LEVEL FAIRNESS: WARNING"
+          echo "   Best/Worst field ratio: ${FIELD_RATIO}"
+          echo "   Some research fields are underperforming"
+        else
+          echo "✅ FIELD-LEVEL FAIRNESS: PASS"
+          echo "   Best/Worst field ratio: ${FIELD_RATIO}"
+        fi
+        
+        echo ""
+        echo "============================================================"
     
     - name: Upload Bias Reports
       uses: actions/upload-artifact@v4
@@ -228,10 +240,7 @@ EOF
         name: bias-reports
         path: |
           citeconnect-backend/bias_report_cold_start_before.json
-          citeconnect-backend/model_bias_report.json
-          citeconnect-backend/fairness_config.json
           citeconnect-backend/bias_config/bias_mitigation_config.json
-          citeconnect-backend/bias_plots/
     
     - name: Comment on PR with Bias Results
       if: github.event_name == 'pull_request' && steps.user_bias.outputs.max_disparity != ''
@@ -244,11 +253,9 @@ EOF
           const criticalThreshold = 0.30;
           const fieldThreshold = 0.80;
           
-          // Check if any bias detected
           const hasBias = disparity >= alertThreshold || fieldRatio < fieldThreshold;
           
           if (!hasBias) {
-            // No comment needed for passing checks
             return;
           }
           
@@ -256,7 +263,6 @@ EOF
           let status = disparity >= criticalThreshold ? 'CRITICAL' : 'WARNING';
           let color = disparity >= criticalThreshold ? '🔴' : '🟡';
           
-          // Build field analysis section
           let fieldSection = '';
           if (fieldRatio < fieldThreshold) {
             const fieldDisparity = ((1 - fieldRatio) * 100).toFixed(1);
