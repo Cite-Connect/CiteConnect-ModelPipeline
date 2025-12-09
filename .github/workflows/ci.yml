@@ -46,7 +46,6 @@ jobs:
         # Install from citeconnect-backend
         echo "Installing citeconnect-backend dependencies..."
         pip install -r ./citeconnect-backend/requirements.txt
-        fi
 
     - name: Run all tests from tests folder
       env:
