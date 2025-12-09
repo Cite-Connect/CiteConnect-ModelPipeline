@@ -1,6 +1,3 @@
-Here’s your updated **`app/main.py`** with the `RETRAIN_NEEDED` metric fully wired in (including `avg_combined` + `drift_score` tracking and the final flag logic):
-
-```python
 """
 CiteConnect Backend Application Entry Point.
 Initializes all services, loads models, and configures FastAPI.
@@ -757,16 +754,11 @@ async def metrics_endpoint():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-<<<<<<< HEAD
     port = int(os.getenv("DEPLOYMENT_PORT", 8000))
-=======
-
->>>>>>> de7e155 (Add monitoring, bias & drift metrics, and dashboard artifacts)
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=8000,
+        port=port,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )
-```
