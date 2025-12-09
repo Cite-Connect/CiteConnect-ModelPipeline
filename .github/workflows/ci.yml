@@ -2,7 +2,10 @@ name: Unit & Integration Tests
 
 on:
   push:
-    branches: ['*']
+    branches:
+      - '*'
+      - 'main'
+      - 'feature/llm-service-knowledge-base'
   pull_request:
     branches: ['*']
   workflow_dispatch:
