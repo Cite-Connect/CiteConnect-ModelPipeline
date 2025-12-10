@@ -5,6 +5,37 @@ import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from typing import Generator
 import numpy as np
+import logging
+import structlog
+
+# Configure logging for tests at module level (runs once)
+def pytest_configure(config):
+    """Configure logging for test environment."""
+    # Simple structlog configuration for tests without filter_by_level
+    structlog.configure(
+        processors=[
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_logger_name,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.PositionalArgumentsFormatter(),
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.processors.UnicodeDecoder(),
+            structlog.dev.ConsoleRenderer(),  # Simple console output for tests
+        ],
+        wrapper_class=structlog.stdlib.BoundLogger,
+        context_class=dict,
+        logger_factory=structlog.stdlib.LoggerFactory(),
+        cache_logger_on_first_use=True,
+    )
+    
+    # Configure standard library logging
+    logging.basicConfig(
+        format="%(message)s",
+        stream=None,  # Suppress output during tests
+        level=logging.WARNING,  # Only show warnings and errors
+    )
 
 # Mock database connections
 @pytest.fixture
