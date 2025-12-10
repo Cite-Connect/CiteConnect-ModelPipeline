@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251209-122807",
+  "user_id": 19,
+  "timestamp": "2025-12-09T12:30:29.792558",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "dbaea90511b7296a7b2616c0b798389a494ce16d",
+      "title": "Mean-variance portfolio optimization using machine learning-based stock price prediction",
+      "relevance_score": 1.0
+    },
+    {
+      "paper_id": "248861a4e9c668d703ca841818c0a9ec30e4ecec",
+      "title": "Optimization Methods in Finance",
+      "relevance_score": 1.0
+    },
+    {
+      "paper_id": "fe96700ade363c65f784af4852a078ee4ec680e0",
+      "title": "A comprehensive review of deterministic models and applications for mean-variance portfolio optimization",
+      "relevance_score": 1.0
+    },
+    {
+      "paper_id": "a7fb0a4b00a70588552bf2dc84ca4af42a80c070",
+      "title": "Portfolio selection problems with Markowitz\u2019s mean\u2013variance framework: a review of literature",
+      "relevance_score": 1.0
+    },
+    {
+      "paper_id": "255719dc22172967a58852cdbf638b6ea75db9b5",
+      "title": "A survey of swarm intelligence for portfolio optimization: Algorithms and applications",
+      "relevance_score": 0.991
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "18a7f348a27d3f8a1eed470b1e3ab6d657f442a4",
+      "title": "A possibilistic mean-semivariance-entropy model for multi-period portfolio selection with transaction costs",
+      "relevance_score": 0.355
+    },
+    {
+      "paper_id": "428638bc361dfb904360606e288d8cbc1dee2d83",
+      "title": "A Particle Swarm Optimization Copula-Based Approach with Application to Cryptocurrency Portfolio Optimisation",
+      "relevance_score": 0.353
+    },
+    {
+      "paper_id": "a3d686e5aa91cbf767d5b76759db551ec896e350",
+      "title": "Portfolio Optimization",
+      "relevance_score": 0.329
+    },
+    {
+      "paper_id": "e985af95d60ed1b9a2edc86aed7c057e2480e8ee",
+      "title": "A novel hybrid stock selection method with stock prediction",
+      "relevance_score": 0.327
+    },
+    {
+      "paper_id": "16b9578f95847e2c92c8bcebbb1c4a93707c37c9",
+      "title": "Applying modern portfolio theory for a dynamic energy portfolio allocation in electricity markets",
+      "relevance_score": 0.315
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "dbaea90511b7296a7b2616c0b798389a494ce16d",
+      "paper_title": "Mean-variance portfolio optimization using machine learning-...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:30:11.096848"
+    },
+    {
+      "number": 2,
+      "paper_id": "248861a4e9c668d703ca841818c0a9ec30e4ecec",
+      "paper_title": "Optimization Methods in Finance...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:30:12.204528"
+    },
+    {
+      "number": 3,
+      "paper_id": "fe96700ade363c65f784af4852a078ee4ec680e0",
+      "paper_title": "A comprehensive review of deterministic models and applicati...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:30:13.276124"
+    },
+    {
+      "number": 4,
+      "paper_id": "a7fb0a4b00a70588552bf2dc84ca4af42a80c070",
+      "paper_title": "Portfolio selection problems with Markowitz\u2019s mean\u2013variance ...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:30:14.474962"
+    },
+    {
+      "number": 5,
+      "paper_id": "255719dc22172967a58852cdbf638b6ea75db9b5",
+      "paper_title": "A survey of swarm intelligence for portfolio optimization: A...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:30:15.682931"
+    },
+    {
+      "number": 6,
+      "paper_id": "915fad115bf1af00961fcfd796c3fb4c828f5eb0",
+      "paper_title": "Improved Covariance Matrix Estimation for Portfolio Risk Mea...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:30:16.880263"
+    },
+    {
+      "number": 7,
+      "paper_id": "8d99c3bd9db2f518a3e481f88da93bf255f9c161",
+      "paper_title": "A novel hybrid PSO-based metaheuristic for costly portfolio ...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:30:18.038267"
+    },
+    {
+      "number": 8,
+      "paper_id": "4b7d430fdf75bfc6e69a30b97903a4f1fbe3bc2a",
+      "paper_title": "Portfolio optimization of financial commodities with energy ...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:30:19.247960"
+    },
+    {
+      "number": 9,
+      "paper_id": "2e1b3f25f9a5871bfdd2884bffb57136f52d3470",
+      "paper_title": "Uncertain random portfolio selection based on risk curve...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:30:20.416177"
+    },
+    {
+      "number": 10,
+      "paper_id": "00c2d8e2ae08760c4bde46d119670732c09191f9",
+      "paper_title": "Multi-period portfolio selection problem under uncertain env...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T12:30:21.494480"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 19,
+        "username": "synthetic_fintech_masters_5@seed.local",
+        "interaction_count": 4,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-11-30T01:06:29.855462",
+        "primary_domain": "fintech",
+        "interests": [
+          "credit risk",
+          "financial forecasting",
+          "portfolio optimization"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 19,
+        "username": "synthetic_fintech_masters_5@seed.local",
+        "interaction_count": 14,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T17:30:20.221337",
+        "primary_domain": "fintech",
+        "interests": [
+          "credit risk",
+          "financial forecasting",
+          "portfolio optimization"
+        ]
+      }
+    }
+  ]
+}

@@ -86,7 +86,8 @@ async def get_recommendations(
         # Map model names
         model_map = {
             'minilm': 'all-MiniLM-L6-v2',
-            'specter': 'specter2'
+            'specter2': 'specter',
+            'specter': 'specter'
         }
         model_name = model_map.get(request_data.model_preference, request_data.model_preference)
 
@@ -131,7 +132,29 @@ async def get_recommendations(
                 }
             }
         )
+@router.post(
+    "/test",
+    response_model=RecommendationResponse,
+    summary="Test recommendations (no auth)",
+    description="For testing/simulations only - bypasses authentication"
+)
+async def get_recommendations_test(
+    request_data: RecommendationRequest,
+    orchestrator: RecommendationOrchestrator = Depends(get_recommendation_orchestrator)
+):
+    """Generate recommendations without authentication (testing only)."""
+    model_map = {'minilm': 'all-MiniLM-L6-v2', 'specter': 'specter', 'specter2': 'specter'}
+    model_name = model_map.get(request_data.model_preference, request_data.model_preference)
 
+    result = await orchestrator.generate_recommendations(
+        user_id=request_data.user_id,
+        model_name=model_name,
+        count=request_data.count,
+        search_query=request_data.search_query,
+        filters=request_data.filters.dict() if request_data.filters else None
+    )
+    
+    return result
 
 @router.get(
     "/{user_id}/history",
@@ -255,7 +278,7 @@ async def evaluate_recommendations(
         evaluation_result = await eval_service.evaluate_cold_start_recommendations(
             user_id=user_id,
             recommendations=recommendations,
-            store_result=False 
+            store_result=True 
         )
         
         return {

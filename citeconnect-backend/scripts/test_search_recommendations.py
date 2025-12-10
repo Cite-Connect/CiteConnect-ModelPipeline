@@ -15,14 +15,14 @@ def test_search_augmented():
     print("=" * 70)
     
     payload = {
-        "user_id": 14,
-        "count": 5,
+        "user_id": 107,
+        "count": 10,
         "model_preference": "minilm",
-        "search_query": "trustworthy AI in healthcare applications",
+        "search_query": "algorithmic trading",
         "session_id": "test-search-001"
     }
     
-    response = requests.post(f"{API_BASE}/recommendations", json=payload)
+    response = requests.post(f"{API_BASE}/recommendations/test", json=payload)
     
     print(f"\nStatus: {response.status_code}")
     
@@ -34,8 +34,8 @@ def test_search_augmented():
         print(f"✅ Search query: {result['metadata'].get('search_query')}")
         print(f"✅ Time: {result['metadata']['generation_time_ms']:.0f}ms")
         
-        print("\nTop 3 Papers:")
-        for i, paper in enumerate(result['recommendations'][:3], 1):
+        print("\nTop 10 Papers:")
+        for i, paper in enumerate(result['recommendations'][:10], 1):
             print(f"\n  {i}. {paper['title'][:70]}...")
             print(f"     Score: {paper.get('relevance_score', 'N/A')}")
             print(f"     Match: {paper.get('match_source', 'N/A')}")
@@ -64,7 +64,7 @@ def test_without_search():
         "session_id": "test-regular-001"
     }
     
-    response = requests.post(f"{API_BASE}/recommendations", json=payload)
+    response = requests.post(f"{API_BASE}/recommendations/test", json=payload)
     
     print(f"\nStatus: {response.status_code}")
     
@@ -101,7 +101,7 @@ def test_different_queries():
             "session_id": f"test-{query[:10]}"
         }
         
-        response = requests.post(f"{API_BASE}/recommendations", json=payload)
+        response = requests.post(f"{API_BASE}/recommendations/test", json=payload)
         
         if response.status_code == 200:
             result = response.json()
