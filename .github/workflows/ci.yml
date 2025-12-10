@@ -131,33 +131,18 @@ jobs:
             echo ""
             echo "✅ Bias report generated successfully"
             
-            # Extract max disparity - use proper multi-line Python to avoid quoting issues
-            MAX_DISPARITY=$(python3 << 'PYSCRIPT'
-import json
-with open("bias_report_cold_start_before.json") as f:
-    data = json.load(f)
-findings = data.get("bias_findings", [])
-if findings:
-    print(f"{max(f['disparity'] for f in findings):.4f}")
-else:
-    print("0.0000")
-PYSCRIPT
-)
+            # Extract max disparity - use simple python with escaped quotes  
+            MAX_DISPARITY=$(python3 -c "import json; f=open('bias_report_cold_start_before.json'); d=json.load(f); findings=d.get('bias_findings',[]); print(f\"{max([x['disparity'] for x in findings]):.4f}\" if findings else '0.0000')")
             
             # Extract number of bias findings
-            BIAS_COUNT=$(python3 << 'PYSCRIPT'
-import json
-with open("bias_report_cold_start_before.json") as f:
-    data = json.load(f)
-print(len(data.get("bias_findings", [])))
-PYSCRIPT
-)
+            BIAS_COUNT=$(python3 -c "import json; f=open('bias_report_cold_start_before.json'); d=json.load(f); print(len(d.get('bias_findings',[])))")
             
             echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
             echo "bias_count=$BIAS_COUNT" >> $GITHUB_OUTPUT
             echo ""
             echo "📊 Results:"
-            echo "   - Max Disparity: $MAX_DISPARITY ($(python3 -c "print(f'{float(\"$MAX_DISPARITY\") * 100:.1f}%')" 2>/dev/null || echo 'N/A'))"
+            MAX_DISPARITY_PCT=$(python3 -c "print(f'{float($MAX_DISPARITY) * 100:.1f}%')" 2>/dev/null || echo 'N/A')
+            echo "   - Max Disparity: $MAX_DISPARITY ($MAX_DISPARITY_PCT)"
             echo "   - Bias Findings: $BIAS_COUNT"
             
             # Check if mitigation config was generated
