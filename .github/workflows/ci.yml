@@ -133,8 +133,8 @@ jobs:
           echo ""
           echo "✅ Bias report generated successfully"
           
-          # Extract max disparity - use proper multi-line Python to avoid quoting issues
-          MAX_DISPARITY=$(python3 << 'PYSCRIPT'
+          # Extract max disparity using a temp Python script
+          cat > /tmp/extract_disparity.py << 'EOF'
 import json
 with open("bias_report_cold_start_before.json") as f:
     data = json.load(f)
@@ -143,17 +143,17 @@ if findings:
     print(f"{max(f['disparity'] for f in findings):.4f}")
 else:
     print("0.0000")
-PYSCRIPT
-)
+EOF
+          MAX_DISPARITY=$(python3 /tmp/extract_disparity.py)
           
           # Extract number of bias findings
-          BIAS_COUNT=$(python3 << 'PYSCRIPT'
+          cat > /tmp/extract_count.py << 'EOF'
 import json
 with open("bias_report_cold_start_before.json") as f:
     data = json.load(f)
 print(len(data.get("bias_findings", [])))
-PYSCRIPT
-)
+EOF
+          BIAS_COUNT=$(python3 /tmp/extract_count.py)
           
           echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
           echo "bias_count=$BIAS_COUNT" >> $GITHUB_OUTPUT
