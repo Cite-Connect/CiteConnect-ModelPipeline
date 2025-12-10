@@ -19,73 +19,72 @@ jobs:
         python-version: ['3.11']
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
     
-    - name: Debug - List files to find requirements.txt
-      run: |
-        echo "=== Repository structure ==="
-        ls -la
-        echo ""
-        echo "=== Looking for requirements files ==="
-        find . -name "requirements*.txt" -type f
-        echo ""
-        echo "=== Current directory ==="
-        pwd
+      - name: Debug - List files to find requirements.txt
+        run: |
+          echo "=== Repository structure ==="
+          ls -la
+          echo ""
+          echo "=== Looking for requirements files ==="
+          find . -name "requirements*.txt" -type f
+          echo ""
+          echo "=== Current directory ==="
+          pwd
 
-
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-        cache-dependency-path: |
-          citeconnect-backend/requirements.txt
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: |
+            citeconnect-backend/requirements.txt
     
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        
-        # Install from citeconnect-backend
-        echo "Installing citeconnect-backend dependencies..."
-        pip install -r ./citeconnect-backend/requirements.txt
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          
+          # Install from citeconnect-backend
+          echo "Installing citeconnect-backend dependencies..."
+          pip install -r ./citeconnect-backend/requirements.txt
     
-    - name: Run all tests from tests folder
-      env:
-        PYTHONPATH: citeconnect-backend
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        ENVIRONMENT: test
-        SUPABASE_URL: http://example.com
-        SECRET_KEY: dummy-secret-key
-      run: |
-        echo "Running tests from citeconnect-backend/tests/ directory"
-        echo "This includes:"
-        echo "  - tests/test_api/ (API endpoint tests)"
-        echo "  - tests/test_services/ (Service layer tests)"
-        echo "  - tests/test_utils/ (Utility tests)"
-        echo "  - tests/integration/ (Integration tests)"
-        echo ""
-        pytest --cov=citeconnect-backend/app \
-               --cov-report=html \
-               --cov-report=term-missing \
-               --cov-report=xml \
-               -v \
-               --tb=short \
-               citeconnect-backend/tests/
+      - name: Run all tests from tests folder
+        env:
+          PYTHONPATH: citeconnect-backend
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENVIRONMENT: test
+          SUPABASE_URL: http://example.com
+          SECRET_KEY: dummy-secret-key
+        run: |
+          echo "Running tests from citeconnect-backend/tests/ directory"
+          echo "This includes:"
+          echo "  - tests/test_api/ (API endpoint tests)"
+          echo "  - tests/test_services/ (Service layer tests)"
+          echo "  - tests/test_utils/ (Utility tests)"
+          echo "  - tests/integration/ (Integration tests)"
+          echo ""
+          pytest --cov=citeconnect-backend/app \
+                 --cov-report=html \
+                 --cov-report=term-missing \
+                 --cov-report=xml \
+                 -v \
+                 --tb=short \
+                 citeconnect-backend/tests/
     
-    - name: Upload coverage to artifacts
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-report
-        path: htmlcov/
+      - name: Upload coverage to artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-report
+          path: htmlcov/
     
-    - name: Upload coverage XML
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: coverage-xml
-        path: coverage.xml
+      - name: Upload coverage XML
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage-xml
+          path: coverage.xml
 
   bias-detection:
     runs-on: ubuntu-latest
@@ -94,46 +93,46 @@ jobs:
     continue-on-error: false
 
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
-    - name: Set up Python 3.11
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.11'
-        cache: 'pip'
-        cache-dependency-path: citeconnect-backend/requirements.txt
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: citeconnect-backend/requirements.txt
 
-    - name: Install bias detection dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r citeconnect-backend/requirements.txt
+      - name: Install bias detection dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r citeconnect-backend/requirements.txt
 
-    - name: Run User-Profile Bias Detection
-      id: user_bias
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        ENVIRONMENT: test
-        SUPABASE_URL: http://example.com
-        SECRET_KEY: dummy-secret-key
-      working-directory: citeconnect-backend
-      run: |
-        echo "=================================================="
-        echo "  🔍 User-Profile Bias Detection (Cold-Start)"
-        echo "=================================================="
-        echo "Querying cold_start_evaluations table..."
-        echo ""
-
-        # Run bias detection script
-        python scripts/bias_slicing_cold_start.py
-        
-        # Check if report was generated
-        if [ -f "bias_report_cold_start_before.json" ]; then
+      - name: Run User-Profile Bias Detection
+        id: user_bias
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENVIRONMENT: test
+          SUPABASE_URL: http://example.com
+          SECRET_KEY: dummy-secret-key
+        working-directory: citeconnect-backend
+        run: |
+          echo "=================================================="
+          echo "  🔍 User-Profile Bias Detection (Cold-Start)"
+          echo "=================================================="
+          echo "Querying cold_start_evaluations table..."
           echo ""
-          echo "✅ Bias report generated successfully"
+
+          # Run bias detection script
+          python scripts/bias_slicing_cold_start.py
           
-          # Extract max disparity - use proper multi-line Python to avoid quoting issues
-          MAX_DISPARITY=$(python3 << 'PYSCRIPT'
+          # Check if report was generated
+          if [ -f "bias_report_cold_start_before.json" ]; then
+            echo ""
+            echo "✅ Bias report generated successfully"
+            
+            # Extract max disparity - use proper multi-line Python to avoid quoting issues
+            MAX_DISPARITY=$(python3 << 'PYSCRIPT'
 import json
 with open("bias_report_cold_start_before.json") as f:
     data = json.load(f)
@@ -144,238 +143,238 @@ else:
     print("0.0000")
 PYSCRIPT
 )
-          
-          # Extract number of bias findings
-          BIAS_COUNT=$(python3 << 'PYSCRIPT'
+            
+            # Extract number of bias findings
+            BIAS_COUNT=$(python3 << 'PYSCRIPT'
 import json
 with open("bias_report_cold_start_before.json") as f:
     data = json.load(f)
 print(len(data.get("bias_findings", [])))
 PYSCRIPT
 )
-          
-          echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
-          echo "bias_count=$BIAS_COUNT" >> $GITHUB_OUTPUT
-          echo ""
-          echo "📊 Results:"
-          echo "   - Max Disparity: $MAX_DISPARITY ($(python3 -c "print(f'{float($MAX_DISPARITY) * 100:.1f}%')" 2>/dev/null || echo 'N/A'))"
-          echo "   - Bias Findings: $BIAS_COUNT"
-          
-          # Check if mitigation config was generated
-          if [ -f "bias_config/bias_mitigation_config.json" ]; then
-            echo "   - Mitigation config: ✅ Generated"
+            
+            echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
+            echo "bias_count=$BIAS_COUNT" >> $GITHUB_OUTPUT
+            echo ""
+            echo "📊 Results:"
+            echo "   - Max Disparity: $MAX_DISPARITY ($(python3 -c "print(f'{float(\"$MAX_DISPARITY\") * 100:.1f}%')" 2>/dev/null || echo 'N/A'))"
+            echo "   - Bias Findings: $BIAS_COUNT"
+            
+            # Check if mitigation config was generated
+            if [ -f "bias_config/bias_mitigation_config.json" ]; then
+              echo "   - Mitigation config: ✅ Generated"
+            fi
+          else
+            echo "⚠️  No bias report generated (possibly no data in DB)"
+            echo "max_disparity=0.0000" >> $GITHUB_OUTPUT
+            echo "bias_count=0" >> $GITHUB_OUTPUT
           fi
-        else
-          echo "⚠️  No bias report generated (possibly no data in DB)"
-          echo "max_disparity=0.0000" >> $GITHUB_OUTPUT
-          echo "bias_count=0" >> $GITHUB_OUTPUT
-        fi
 
-    - name: Run Domain Representation Fairness Detection
-      id: domain_fairness
-      continue-on-error: true
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        ENVIRONMENT: test
-        SUPABASE_URL: http://example.com
-        SECRET_KEY: dummy-secret-key
-      working-directory: citeconnect-backend
-      run: |
-        echo ""
-        echo "=================================================="
-        echo "  🔍 Domain Representation Fairness Detection"
-        echo "=================================================="
-        echo "Querying papers table for domain distribution..."
-        echo ""
-
-        # Run domain fairness detection (queries PostgreSQL papers table)
-        python scripts/domain_representation_fairness.py
-
-        if [ -f "fairness_config.json" ]; then
+      - name: Run Domain Representation Fairness Detection
+        id: domain_fairness
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          ENVIRONMENT: test
+          SUPABASE_URL: http://example.com
+          SECRET_KEY: dummy-secret-key
+        working-directory: citeconnect-backend
+        run: |
           echo ""
-          echo "✅ Fairness config generated successfully"
+          echo "=================================================="
+          echo "  🔍 Domain Representation Fairness Detection"
+          echo "=================================================="
+          echo "Querying papers table for domain distribution..."
+          echo ""
+
+          # Run domain fairness detection (queries PostgreSQL papers table)
+          python scripts/domain_representation_fairness.py
+
+          if [ -f "fairness_config.json" ]; then
+            echo ""
+            echo "✅ Fairness config generated successfully"
+            
+            # Extract under-served domain count
+            UNDERSERVED_COUNT=$(python -c 'import json; data=json.load(open("fairness_config.json")); fairness=data.get("paper_domain_fairness",{}); print(len(fairness.get("under_served_domains",[])))' 2>/dev/null || echo "0")
+            
+            # Extract domain count
+            DOMAIN_COUNT=$(python -c 'import json; data=json.load(open("fairness_config.json")); fairness=data.get("paper_domain_fairness",{}); print(len(fairness.get("domains",{})))' 2>/dev/null || echo "0")
+            
+            echo "domain_count=$DOMAIN_COUNT" >> $GITHUB_OUTPUT
+            echo "underserved_count=$UNDERSERVED_COUNT" >> $GITHUB_OUTPUT
+            echo ""
+            echo "📊 Results:"
+            echo "   - Total Domains: $DOMAIN_COUNT"
+            echo "   - Under-Served Domains: $UNDERSERVED_COUNT"
+          else
+            echo "⚠️  No fairness config generated (possibly no data in papers table)"
+            echo "domain_count=0" >> $GITHUB_OUTPUT
+            echo "underserved_count=0" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Analyze Bias Results & Block if Critical
+        env:
+          MAX_DISPARITY: ${{ steps.user_bias.outputs.max_disparity }}
+          BIAS_COUNT: ${{ steps.user_bias.outputs.bias_count }}
+          DOMAIN_COUNT: ${{ steps.domain_fairness.outputs.domain_count }}
+          UNDERSERVED_COUNT: ${{ steps.domain_fairness.outputs.underserved_count }}
+        run: |
+          MAX_DISPARITY="${MAX_DISPARITY:-0}"
+          BIAS_COUNT="${BIAS_COUNT:-0}"
+          DOMAIN_COUNT="${DOMAIN_COUNT:-0}"
+          UNDERSERVED_COUNT="${UNDERSERVED_COUNT:-0}"
+          ALERT_THRESHOLD=0.20
+          CRITICAL_THRESHOLD=0.30
           
-          # Extract under-served domain count
-          UNDERSERVED_COUNT=$(python -c 'import json; data=json.load(open("fairness_config.json")); fairness=data.get("paper_domain_fairness",{}); print(len(fairness.get("under_served_domains",[])))' 2>/dev/null || echo "0")
-          
-          # Extract domain count
-          DOMAIN_COUNT=$(python -c 'import json; data=json.load(open("fairness_config.json")); fairness=data.get("paper_domain_fairness",{}); print(len(fairness.get("domains",{})))' 2>/dev/null || echo "0")
-          
-          echo "domain_count=$DOMAIN_COUNT" >> $GITHUB_OUTPUT
-          echo "underserved_count=$UNDERSERVED_COUNT" >> $GITHUB_OUTPUT
+          SHOULD_BLOCK=false
+
           echo ""
-          echo "📊 Results:"
-          echo "   - Total Domains: $DOMAIN_COUNT"
-          echo "   - Under-Served Domains: $UNDERSERVED_COUNT"
-        else
-          echo "⚠️  No fairness config generated (possibly no data in papers table)"
-          echo "domain_count=0" >> $GITHUB_OUTPUT
-          echo "underserved_count=0" >> $GITHUB_OUTPUT
-        fi
-
-    - name: Analyze Bias Results & Block if Critical
-      env:
-        MAX_DISPARITY: ${{ steps.user_bias.outputs.max_disparity }}
-        BIAS_COUNT: ${{ steps.user_bias.outputs.bias_count }}
-        DOMAIN_COUNT: ${{ steps.domain_fairness.outputs.domain_count }}
-        UNDERSERVED_COUNT: ${{ steps.domain_fairness.outputs.underserved_count }}
-      run: |
-        MAX_DISPARITY="${MAX_DISPARITY:-0}"
-        BIAS_COUNT="${BIAS_COUNT:-0}"
-        DOMAIN_COUNT="${DOMAIN_COUNT:-0}"
-        UNDERSERVED_COUNT="${UNDERSERVED_COUNT:-0}"
-        ALERT_THRESHOLD=0.20
-        CRITICAL_THRESHOLD=0.30
-        
-        SHOULD_BLOCK=false
-
-        echo ""
-        echo "============================================================"
-        echo "  📊 BIAS DETECTION RESULTS"
-        echo "============================================================"
-        echo "User-Profile:"
-        echo "  - Max Disparity: ${MAX_DISPARITY}"
-        echo "  - Bias Findings: ${BIAS_COUNT}"
-        echo ""
-        echo "Domain Representation:"
-        echo "  - Total Domains: ${DOMAIN_COUNT}"
-        echo "  - Under-Served Domains: ${UNDERSERVED_COUNT}"
-        echo ""
-        echo "Thresholds:"
-        echo "  - Alert: ${ALERT_THRESHOLD} (20%)"
-        echo "  - Critical (BLOCKS): ${CRITICAL_THRESHOLD} (30%)"
-        echo "============================================================"
-        echo ""
-
-        # Check user-profile bias
-        if (( $(echo "$MAX_DISPARITY >= $CRITICAL_THRESHOLD" | bc -l) )); then
-          echo "🚨 USER-PROFILE BIAS: CRITICAL!"
-          echo "   Disparity ${MAX_DISPARITY} >= ${CRITICAL_THRESHOLD}"
-          echo "   This BLOCKS deployment!"
+          echo "============================================================"
+          echo "  📊 BIAS DETECTION RESULTS"
+          echo "============================================================"
+          echo "User-Profile:"
+          echo "  - Max Disparity: ${MAX_DISPARITY}"
+          echo "  - Bias Findings: ${BIAS_COUNT}"
           echo ""
-          SHOULD_BLOCK=true
-          echo "Action required:"
-          echo "  1. Review bias_report_cold_start_before.json in artifacts"
-          echo "  2. Check bias_config/bias_mitigation_config.json (auto-generated)"
-          echo "  3. Apply mitigation or investigate data quality"
-          echo "  4. Re-run evaluation after fixes"
-        elif (( $(echo "$MAX_DISPARITY >= $ALERT_THRESHOLD" | bc -l) )); then
-          echo "⚠️  USER-PROFILE BIAS: WARNING"
-          echo "   Disparity ${MAX_DISPARITY} >= ${ALERT_THRESHOLD}"
+          echo "Domain Representation:"
+          echo "  - Total Domains: ${DOMAIN_COUNT}"
+          echo "  - Under-Served Domains: ${UNDERSERVED_COUNT}"
           echo ""
-          echo "Recommendation: Review and monitor bias trends"
-        else
-          echo "✅ USER-PROFILE BIAS: PASS"
-          echo "   Disparity ${MAX_DISPARITY} < ${ALERT_THRESHOLD}"
-        fi
-
-        echo ""
-
-        # Check domain representation
-        if [ "$UNDERSERVED_COUNT" -gt "0" ]; then
-          echo "⚠️  DOMAIN REPRESENTATION: WARNING"
-          echo "   ${UNDERSERVED_COUNT} domains are under-represented"
-          echo "   (Below 50% of max domain paper count)"
-          echo ""
-          echo "Action recommended:"
-          echo "  1. Review fairness_config.json for details"
-          echo "  2. System will auto-boost under-served domains at runtime"
-        else
-          echo "✅ DOMAIN REPRESENTATION: PASS"
-          echo "   All domains adequately represented"
-        fi
-
-        echo ""
-        echo "============================================================"
-        
-        # BLOCK DEPLOYMENT IF CRITICAL BIAS DETECTED
-        if [ "$SHOULD_BLOCK" = "true" ]; then
-          echo ""
-          echo "❌ DEPLOYMENT BLOCKED DUE TO CRITICAL BIAS"
+          echo "Thresholds:"
+          echo "  - Alert: ${ALERT_THRESHOLD} (20%)"
+          echo "  - Critical (BLOCKS): ${CRITICAL_THRESHOLD} (30%)"
           echo "============================================================"
           echo ""
-          echo "Pipeline will FAIL to prevent biased model deployment."
-          echo "Fix the bias issues above and re-run the pipeline."
+
+          # Check user-profile bias
+          if (( $(echo "$MAX_DISPARITY >= $CRITICAL_THRESHOLD" | bc -l) )); then
+            echo "🚨 USER-PROFILE BIAS: CRITICAL!"
+            echo "   Disparity ${MAX_DISPARITY} >= ${CRITICAL_THRESHOLD}"
+            echo "   This BLOCKS deployment!"
+            echo ""
+            SHOULD_BLOCK=true
+            echo "Action required:"
+            echo "  1. Review bias_report_cold_start_before.json in artifacts"
+            echo "  2. Check bias_config/bias_mitigation_config.json (auto-generated)"
+            echo "  3. Apply mitigation or investigate data quality"
+            echo "  4. Re-run evaluation after fixes"
+          elif (( $(echo "$MAX_DISPARITY >= $ALERT_THRESHOLD" | bc -l) )); then
+            echo "⚠️  USER-PROFILE BIAS: WARNING"
+            echo "   Disparity ${MAX_DISPARITY} >= ${ALERT_THRESHOLD}"
+            echo ""
+            echo "Recommendation: Review and monitor bias trends"
+          else
+            echo "✅ USER-PROFILE BIAS: PASS"
+            echo "   Disparity ${MAX_DISPARITY} < ${ALERT_THRESHOLD}"
+          fi
+
           echo ""
-          exit 1
-        fi
-        
-        echo ""
-        echo "✅ Bias checks passed - deployment can proceed"
-        echo ""
 
-    - name: Upload Bias Reports
-      uses: actions/upload-artifact@v4
-      if: always()
-      with:
-        name: bias-reports
-        path: |
-          citeconnect-backend/bias_report_cold_start_before.json
-          citeconnect-backend/bias_reports.json
-          citeconnect-backend/bias_config/bias_mitigation_config.json
-          citeconnect-backend/fairness_config.json
+          # Check domain representation
+          if [ "$UNDERSERVED_COUNT" -gt "0" ]; then
+            echo "⚠️  DOMAIN REPRESENTATION: WARNING"
+            echo "   ${UNDERSERVED_COUNT} domains are under-represented"
+            echo "   (Below 50% of max domain paper count)"
+            echo ""
+            echo "Action recommended:"
+            echo "  1. Review fairness_config.json for details"
+            echo "  2. System will auto-boost under-served domains at runtime"
+          else
+            echo "✅ DOMAIN REPRESENTATION: PASS"
+            echo "   All domains adequately represented"
+          fi
 
-    - name: Comment on PR with Bias Results
-      if: github.event_name == 'pull_request' && steps.user_bias.outputs.max_disparity != ''
-      uses: actions/github-script@v7
-      with:
-        script: |
-          const disparity = parseFloat('${{ steps.user_bias.outputs.max_disparity }}');
-          const fieldRatio = parseFloat('${{ steps.field_bias.outputs.field_fairness_ratio }}' || '1.0');
-          const alertThreshold = 0.20;
-          const criticalThreshold = 0.30;
-          const fieldThreshold = 0.80;
+          echo ""
+          echo "============================================================"
+          
+          # BLOCK DEPLOYMENT IF CRITICAL BIAS DETECTED
+          if [ "$SHOULD_BLOCK" = "true" ]; then
+            echo ""
+            echo "❌ DEPLOYMENT BLOCKED DUE TO CRITICAL BIAS"
+            echo "============================================================"
+            echo ""
+            echo "Pipeline will FAIL to prevent biased model deployment."
+            echo "Fix the bias issues above and re-run the pipeline."
+            echo ""
+            exit 1
+          fi
+          
+          echo ""
+          echo "✅ Bias checks passed - deployment can proceed"
+          echo ""
 
-          const hasBias = disparity >= alertThreshold || fieldRatio < fieldThreshold;
+      - name: Upload Bias Reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: bias-reports
+          path: |
+            citeconnect-backend/bias_report_cold_start_before.json
+            citeconnect-backend/bias_reports.json
+            citeconnect-backend/bias_config/bias_mitigation_config.json
+            citeconnect-backend/fairness_config.json
 
-          if (!hasBias) {
-            return;
-          }
+      - name: Comment on PR with Bias Results
+        if: github.event_name == 'pull_request' && steps.user_bias.outputs.max_disparity != ''
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const disparity = parseFloat('${{ steps.user_bias.outputs.max_disparity }}');
+            const fieldRatio = parseFloat('${{ steps.field_bias.outputs.field_fairness_ratio }}' || '1.0');
+            const alertThreshold = 0.20;
+            const criticalThreshold = 0.30;
+            const fieldThreshold = 0.80;
 
-          let emoji = disparity >= criticalThreshold ? '🚨' : '⚠️';
-          let status = disparity >= criticalThreshold ? 'CRITICAL' : 'WARNING';
-          let color = disparity >= criticalThreshold ? '🔴' : '🟡';
+            const hasBias = disparity >= alertThreshold || fieldRatio < fieldThreshold;
 
-          let fieldSection = '';
-          if (fieldRatio < fieldThreshold) {
-            const fieldDisparity = ((1 - fieldRatio) * 100).toFixed(1);
-            fieldSection = '\n### 📊 Field-Level Fairness\n' + color + ' **Field Fairness Ratio:** ' + (fieldRatio * 100).toFixed(1) + '%\n**Disparity:** ' + fieldDisparity + '% between best and worst research fields\n';
-          }
+            if (!hasBias) {
+              return;
+            }
 
-          let statusMessage = '';
-          if (disparity >= criticalThreshold) {
-            statusMessage = '🚨 **Critical bias levels detected!** This would block deployment in production.';
-          } else if (disparity >= alertThreshold) {
-            statusMessage = '⚠️ **Elevated bias detected** - monitoring recommended.';
-          } else {
-            statusMessage = '✅ **User-profile bias within acceptable limits.**';
-          }
+            let emoji = disparity >= criticalThreshold ? '🚨' : '⚠️';
+            let status = disparity >= criticalThreshold ? 'CRITICAL' : 'WARNING';
+            let color = disparity >= criticalThreshold ? '🔴' : '🟡';
 
-          const body = '## ' + emoji + ' Bias Detection ' + status + '\n\n' +
-            '### 👥 User-Profile Bias\n' +
-            color + ' **Max Disparity Detected:** ' + (disparity * 100).toFixed(2) + '%\n\n' +
-            statusMessage + '\n' +
-            fieldSection + '\n' +
-            '### What This Means\n' +
-            '- **User-profile bias:** Disparities between user groups (domain, research stage, reading level)\n' +
-            '- **Field-level fairness:** Performance differences across research fields\n\n' +
-            '### Next Steps\n' +
-            '1. 📥 Download `bias-reports` from [workflow artifacts](' + context.payload.repository.html_url + '/actions/runs/' + context.runId + ')\n' +
-            '2. 📊 Review bias reports:\n' +
-            '   - `bias_report_cold_start_before.json` - User-profile analysis\n' +
-            '   - `model_bias_report.json` - Field-level analysis\n' +
-            '   - `bias_plots/` - Visualizations\n' +
-            '3. 🔧 Check auto-generated mitigation configs:\n' +
-            '   - `bias_mitigation_config.json` - User-profile mitigation\n' +
-            '   - `fairness_config.json` - Field-level fairness\n' +
-            '4. ✅ Verify mitigation is applied in RecommendationService\n' +
-            '5. 🔄 Re-run evaluation after applying fixes\n\n' +
-            '---\n' +
-            '⚙️ *This is currently non-blocking and will not prevent merging.*';
+            let fieldSection = '';
+            if (fieldRatio < fieldThreshold) {
+              const fieldDisparity = ((1 - fieldRatio) * 100).toFixed(1);
+              fieldSection = '\n### 📊 Field-Level Fairness\n' + color + ' **Field Fairness Ratio:** ' + (fieldRatio * 100).toFixed(1) + '%\n**Disparity:** ' + fieldDisparity + '% between best and worst research fields\n';
+            }
 
-          github.rest.issues.createComment({
-            issue_number: context.issue.number,
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-            body: body
-          });
+            let statusMessage = '';
+            if (disparity >= criticalThreshold) {
+              statusMessage = '🚨 **Critical bias levels detected!** This would block deployment in production.';
+            } else if (disparity >= alertThreshold) {
+              statusMessage = '⚠️ **Elevated bias detected** - monitoring recommended.';
+            } else {
+              statusMessage = '✅ **User-profile bias within acceptable limits.**';
+            }
+
+            const body = '## ' + emoji + ' Bias Detection ' + status + '\n\n' +
+              '### 👥 User-Profile Bias\n' +
+              color + ' **Max Disparity Detected:** ' + (disparity * 100).toFixed(2) + '%\n\n' +
+              statusMessage + '\n' +
+              fieldSection + '\n' +
+              '### What This Means\n' +
+              '- **User-profile bias:** Disparities between user groups (domain, research stage, reading level)\n' +
+              '- **Field-level fairness:** Performance differences across research fields\n\n' +
+              '### Next Steps\n' +
+              '1. 📥 Download `bias-reports` from [workflow artifacts](' + context.payload.repository.html_url + '/actions/runs/' + context.runId + ')\n' +
+              '2. 📊 Review bias reports:\n' +
+              '   - `bias_report_cold_start_before.json` - User-profile analysis\n' +
+              '   - `model_bias_report.json` - Field-level analysis\n' +
+              '   - `bias_plots/` - Visualizations\n' +
+              '3. 🔧 Check auto-generated mitigation configs:\n' +
+              '   - `bias_mitigation_config.json` - User-profile mitigation\n' +
+              '   - `fairness_config.json` - Field-level fairness\n' +
+              '4. ✅ Verify mitigation is applied in RecommendationService\n' +
+              '5. 🔄 Re-run evaluation after applying fixes\n\n' +
+              '---\n' +
+              '⚙️ *This is currently non-blocking and will not prevent merging.*';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: body
+            });
