@@ -56,7 +56,10 @@ class TestGraphAPI:
         
         try:
             with patch('app.api.v1.graph.GraphService', return_value=mock_graph_service):
-                response = client.get("/api/v1/graph/citation-network/test_paper_1")
+                response = client.post("/api/v1/graph/citation-network/test_paper_1", json={
+                    "depth": 1,
+                    "max_nodes": 50
+                })
                 
                 # Accept 200 or 500 if service creation fails
                 assert response.status_code in [200, 500]
@@ -72,7 +75,10 @@ class TestGraphAPI:
         
         try:
             with patch('app.api.v1.graph.GraphService', return_value=mock_graph_service):
-                response = client.get("/api/v1/graph/citation-network/test_paper_1?depth=2")
+                response = client.post("/api/v1/graph/citation-network/test_paper_1", json={
+                    "depth": 2,
+                    "max_nodes": 50
+                })
                 
                 assert response.status_code in [200, 500]
         finally:
@@ -84,7 +90,10 @@ class TestGraphAPI:
         
         try:
             with patch('app.api.v1.graph.GraphService', return_value=mock_graph_service):
-                response = client.get("/api/v1/graph/citation-network/test_paper_1?max_nodes=50")
+                response = client.post("/api/v1/graph/citation-network/test_paper_1", json={
+                    "depth": 1,
+                    "max_nodes": 50
+                })
                 
                 assert response.status_code in [200, 500]
         finally:
@@ -99,7 +108,10 @@ class TestGraphAPI:
         
         try:
             with patch('app.api.v1.graph.GraphService', return_value=mock_service):
-                response = client.get("/api/v1/graph/citation-network/invalid_paper_id")
+                response = client.post("/api/v1/graph/citation-network/invalid_paper_id", json={
+                    "depth": 1,
+                    "max_nodes": 50
+                })
                 
                 # Should return 500 due to exception handling
                 assert response.status_code in [200, 404, 400, 500]

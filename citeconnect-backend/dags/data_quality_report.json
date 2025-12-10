@@ -1,0 +1,93 @@
+{
+  "timestamp": "2025-12-01T05:11:47.057632",
+  "task": "load_data_from_pipeline",
+  "status": "success",
+  "data_loaded": {
+    "papers": {
+      "total": 20663,
+      "domains": {
+        "total_domains": 4,
+        "healthcare": 5685,
+        "fintech": 3803,
+        "quantum_computing": 4796
+      },
+      "quality": {
+        "with_abstract": 15926,
+        "with_references": 20663,
+        "with_citations": 20663,
+        "abstract_coverage": 77.07496491312975,
+        "reference_coverage": 100.0,
+        "citation_coverage": 100.0
+      },
+      "statistics": {
+        "avg_citation_count": 609.2428495378213,
+        "year_range": {
+          "min": 1909,
+          "max": 2025
+        }
+      }
+    },
+    "embeddings": {
+      "specter2": {
+        "total": 20663,
+        "unique_papers": 20663,
+        "non_null": 20663,
+        "dimension": 768,
+        "expected_dimension": 768,
+        "coverage": 100.0
+      },
+      "minilm": {
+        "total": 20663,
+        "unique_papers": 20663,
+        "non_null": 20663,
+        "dimension": 384,
+        "expected_dimension": 384,
+        "coverage": 100.0
+      }
+    },
+    "users": {
+      "total": 63,
+      "active": 63,
+      "domains": null,
+      "interests": {
+        "total": 184,
+        "users_with_interests": 61,
+        "avg_per_user": 2.9206349206349205,
+        "avg_weight": null
+      },
+      "profile_embeddings": {
+        "total": 61,
+        "with_embeddings": 61,
+        "coverage": 96.82539682539682
+      }
+    }
+  },
+  "quality_metrics": {
+    "paper_quality_score": 88.54,
+    "embedding_quality_score": 100.0,
+    "user_quality_score": 98.41,
+    "overall_quality_score": 95.1,
+    "thresholds": {
+      "paper_quality_min": 70.0,
+      "embedding_coverage_min": 90.0,
+      "user_quality_min": 50.0,
+      "overall_quality_min": 75.0
+    }
+  },
+  "versioning": {
+    "alembic": {
+      "current_version": null,
+      "status": "not_found",
+      "error": "relation \"alembic_version\" does not exist"
+    },
+    "schema": {
+      "table_count": 22,
+      "status": "valid"
+    },
+    "dvc": {
+      "status": "not_implemented",
+      "note": "DVC tracking not currently implemented in codebase"
+    }
+  },
+  "errors": []
+}
