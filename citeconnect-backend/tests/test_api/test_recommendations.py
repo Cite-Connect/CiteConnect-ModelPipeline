@@ -1,3 +1,4 @@
+# tests/test_api/test_recommendations.py
 """
 Tests for Recommendations API endpoints.
 """
@@ -5,12 +6,31 @@ import pytest
 from fastapi.testclient import TestClient
 from unittest.mock import AsyncMock
 from app.main import app
+from app.api.v1.auth import get_current_user
+
+
+# Mock authenticated user
+def mock_current_user():
+    """Mock authenticated user for testing"""
+    return {
+        "user_id": 1,
+        "email": "test@example.com",
+        "name": "Test User",
+        "is_active": True
+    }
 
 
 @pytest.fixture
 def client():
-    """Create test client."""
-    return TestClient(app)
+    """Create test client with mocked authentication."""
+    # Override authentication dependency
+    app.dependency_overrides[get_current_user] = mock_current_user
+    
+    client = TestClient(app)
+    yield client
+    
+    # Clear overrides after test
+    app.dependency_overrides.clear()
 
 
 class TestRecommendationsAPI:
@@ -21,8 +41,6 @@ class TestRecommendationsAPI:
         """Mock recommendation orchestrator."""
         orchestrator = AsyncMock()
         
-        # Mock the return value to match RecommendationResponse model structure
-        # The endpoint expects: {recommendations: [], metadata: {}, explanations: {}}
         orchestrator.generate_recommendations = AsyncMock(return_value={
             'recommendations': [
                 {
@@ -65,7 +83,6 @@ class TestRecommendationsAPI:
     
     def test_get_recommendations_basic(self, client, mock_orchestrator):
         """Test basic recommendations endpoint."""
-        # Set orchestrator in app.state before making request
         client.app.state.recommendation_orchestrator = mock_orchestrator
         
         try:
@@ -74,7 +91,7 @@ class TestRecommendationsAPI:
                 json={
                     "user_id": 1,
                     "count": 10,
-                    "session_id": "test_session_123"  # Required field
+                    "session_id": "test_session_123"
                 }
             )
             
@@ -100,7 +117,7 @@ class TestRecommendationsAPI:
                 }
             )
             
-            assert response.status_code in [200, 201]
+            assert response.status_code in [200, 201], f"Expected 200/201, got {response.status_code}: {response.text}"
         finally:
             if hasattr(client.app.state, 'recommendation_orchestrator'):
                 delattr(client.app.state, 'recommendation_orchestrator')
@@ -121,15 +138,17 @@ class TestRecommendationsAPI:
                 }
             )
             
-            assert response.status_code in [200, 201]
+            assert response.status_code in [200, 201], f"Expected 200/201, got {response.status_code}: {response.text}"
         finally:
             if hasattr(client.app.state, 'recommendation_orchestrator'):
                 delattr(client.app.state, 'recommendation_orchestrator')
     
     def test_get_recommendations_missing_user_id(self, client, mock_orchestrator):
-        """Test recommendations without user ID."""
-        # Need orchestrator set up even for validation tests
-        # Validation happens after dependency check, so 503 is expected if orchestrator missing
+        """Test recommendations without user ID (defaults to None, triggers auth check)."""
+        from app.api.v1.recommendations import get_current_user
+        
+        # Mock authentication
+        app.dependency_overrides[get_current_user] = lambda: {"user_id": 1, "email": "test@example.com"}
         client.app.state.recommendation_orchestrator = mock_orchestrator
         
         try:
@@ -141,10 +160,11 @@ class TestRecommendationsAPI:
                 }
             )
             
-            # Endpoint validates user_id and returns 400, but dependency check happens first
-            # So we can get either 400 (if validation happens first) or 503 (if dependency check first)
-            assert response.status_code in [400, 422, 503]
+            # user_id is optional (defaults to None), but None != authenticated user → 403
+            assert response.status_code == 403, f"Expected 403, got {response.status_code}: {response.text}"
+            assert "can only request recommendations for yourself" in response.json()["detail"].lower()
         finally:
+            app.dependency_overrides.clear()
             if hasattr(client.app.state, 'recommendation_orchestrator'):
                 delattr(client.app.state, 'recommendation_orchestrator')
     
@@ -162,8 +182,8 @@ class TestRecommendationsAPI:
                 }
             )
             
-            # Pydantic validates count (must be >= 1) before endpoint code runs
-            assert response.status_code in [400, 422]
+            # Pydantic validation error - expects 422
+            assert response.status_code == 422, f"Expected 422, got {response.status_code}: {response.text}"
         finally:
             if hasattr(client.app.state, 'recommendation_orchestrator'):
                 delattr(client.app.state, 'recommendation_orchestrator')

@@ -1,0 +1,93 @@
+{
+  "timestamp": "2025-11-29T14:59:13.568823",
+  "task": "load_data_from_pipeline",
+  "status": "success",
+  "data_loaded": {
+    "papers": {
+      "total": 3011,
+      "domains": {
+        "total_domains": 1,
+        "healthcare": 3011,
+        "fintech": 0,
+        "quantum_computing": 0
+      },
+      "quality": {
+        "with_abstract": 2464,
+        "with_references": 3011,
+        "with_citations": 3011,
+        "abstract_coverage": 81.8332779807373,
+        "reference_coverage": 100.0,
+        "citation_coverage": 100.0
+      },
+      "statistics": {
+        "avg_citation_count": 1466.486549319163,
+        "year_range": {
+          "min": 1982,
+          "max": 2025
+        }
+      }
+    },
+    "embeddings": {
+      "specter2": {
+        "total": 3011,
+        "unique_papers": 3011,
+        "non_null": 3011,
+        "dimension": 768,
+        "expected_dimension": 768,
+        "coverage": 100.0
+      },
+      "minilm": {
+        "total": 3011,
+        "unique_papers": 3011,
+        "non_null": 3011,
+        "dimension": 384,
+        "expected_dimension": 384,
+        "coverage": 100.0
+      }
+    },
+    "users": {
+      "total": 7,
+      "active": 7,
+      "domains": null,
+      "interests": {
+        "total": 19,
+        "users_with_interests": 6,
+        "avg_per_user": 2.7142857142857144,
+        "avg_weight": null
+      },
+      "profile_embeddings": {
+        "total": 0,
+        "with_embeddings": 0,
+        "coverage": 0.0
+      }
+    }
+  },
+  "quality_metrics": {
+    "paper_quality_score": 90.92,
+    "embedding_quality_score": 100.0,
+    "user_quality_score": 92.86,
+    "overall_quality_score": 94.94,
+    "thresholds": {
+      "paper_quality_min": 70.0,
+      "embedding_coverage_min": 90.0,
+      "user_quality_min": 50.0,
+      "overall_quality_min": 75.0
+    }
+  },
+  "versioning": {
+    "alembic": {
+      "current_version": null,
+      "status": "not_found",
+      "error": "relation \"alembic_version\" does not exist"
+    },
+    "schema": {
+      "table_count": 22,
+      "status": "valid"
+    },
+    "dvc": {
+      "status": "not_implemented",
+      "note": "DVC tracking not currently implemented in codebase"
+    }
+  },
+  "errors": []
+}

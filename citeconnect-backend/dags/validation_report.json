@@ -1,0 +1,38 @@
+{
+  "timestamp": "2025-12-01T06:30:59.073011",
+  "task": "validate_data_prerequisites",
+  "status": "success",
+  "checks": {
+    "papers": {
+      "exists": true,
+      "count": 20663,
+      "status": "PASS"
+    },
+    "embeddings": {
+      "all_papers_have_embeddings": true,
+      "total_papers": 20663,
+      "papers_with_specter": 20663,
+      "papers_with_minilm": 20663,
+      "specter_coverage": 100.0,
+      "minilm_coverage": 100.0,
+      "status": "PASS"
+    },
+    "cold_start_users": {
+      "exists": true,
+      "count": 63,
+      "has_at_least_20": true,
+      "status": "PASS"
+    },
+    "ground_truth_papers": {
+      "exists": true,
+      "count": 1000,
+      "status": "PASS"
+    },
+    "ground_truth_relationships": {
+      "exists": true,
+      "count": 942,
+      "status": "PASS"
+    }
+  },
+  "errors": []
+}

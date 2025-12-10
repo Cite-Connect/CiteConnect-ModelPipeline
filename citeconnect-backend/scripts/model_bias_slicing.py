@@ -235,8 +235,8 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
     run_model_bias_analysis(
-        results_path=args.results,
-        metadata_path=args.metadata,
+        results_path=Path(args.results),
+        metadata_path=Path(args.metadata),
         report_path=Path(args.report),
         fairness_config_path=Path(args.fairness_config),
     )

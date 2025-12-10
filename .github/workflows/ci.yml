@@ -90,7 +90,8 @@ jobs:
   bias-detection:
     runs-on: ubuntu-latest
     needs: test
-    continue-on-error: true
+    # DEPLOYMENT BLOCKING: Set to false to block deployment on critical bias
+    continue-on-error: false
 
     steps:
     - name: Checkout code
@@ -112,25 +113,46 @@ jobs:
       id: user_bias
       env:
         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        ENVIRONMENT: test
+        SUPABASE_URL: http://example.com
+        SECRET_KEY: dummy-secret-key
       working-directory: citeconnect-backend
       run: |
         echo "=================================================="
-        echo "  Running User-Profile Bias Detection"
+        echo "  🔍 User-Profile Bias Detection (Cold-Start)"
         echo "=================================================="
+        echo "Querying cold_start_evaluations table..."
+        echo ""
 
+        # Run bias detection script
         python scripts/bias_slicing_cold_start.py
-
+        
+        # Check if report was generated
         if [ -f "bias_report_cold_start_before.json" ]; then
-          echo "✅ User bias report generated"
-
-          MAX_DISPARITY=$(python -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); findings=data.get("bias_findings",[]); print(f"{max([f[\"disparity\"] for f in findings]):.4f}" if findings else "0.0000")' 2>/dev/null || echo "0.0000")
-
-          echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
           echo ""
-          echo "📊 Max Disparity Found: $MAX_DISPARITY"
+          echo "✅ Bias report generated successfully"
+          
+          # Extract max disparity from bias findings
+          MAX_DISPARITY=$(python -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); findings=data.get("bias_findings",[]); print(f"{max([f[\"disparity\"] for f in findings]):.4f}" if findings else "0.0000")' 2>/dev/null || echo "0.0000")
+          
+          # Extract number of bias findings
+          BIAS_COUNT=$(python -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); print(len(data.get("bias_findings",[])))' 2>/dev/null || echo "0")
+          
+          echo "max_disparity=$MAX_DISPARITY" >> $GITHUB_OUTPUT
+          echo "bias_count=$BIAS_COUNT" >> $GITHUB_OUTPUT
+          echo ""
+          echo "📊 Results:"
+          echo "   - Max Disparity: $MAX_DISPARITY"
+          echo "   - Bias Findings: $BIAS_COUNT"
+          
+          # Check if mitigation config was generated
+          if [ -f "bias_config/bias_mitigation_config.json" ]; then
+            echo "   - Mitigation config: ✅ Generated"
+          fi
         else
-          echo "⚠️ Bias report not generated"
+          echo "⚠️  No bias report generated (possibly no data in DB)"
           echo "max_disparity=0.0000" >> $GITHUB_OUTPUT
+          echo "bias_count=0" >> $GITHUB_OUTPUT
         fi
 
     - name: Run Paper-Field Bias Detection
@@ -170,36 +192,43 @@ jobs:
           echo "field_fairness_ratio=1.0000" >> $GITHUB_OUTPUT
         fi
 
-    - name: Analyze Bias Results
+    - name: Analyze Bias Results & Block if Critical
       env:
         MAX_DISPARITY: ${{ steps.user_bias.outputs.max_disparity }}
+        BIAS_COUNT: ${{ steps.user_bias.outputs.bias_count }}
         FIELD_RATIO: ${{ steps.field_bias.outputs.field_fairness_ratio }}
       run: |
         MAX_DISPARITY="${MAX_DISPARITY:-0}"
+        BIAS_COUNT="${BIAS_COUNT:-0}"
         FIELD_RATIO="${FIELD_RATIO:-1.0}"
         ALERT_THRESHOLD=0.20
         CRITICAL_THRESHOLD=0.30
         FIELD_THRESHOLD=0.80
+        
+        SHOULD_BLOCK=false
 
         echo ""
         echo "============================================================"
-        echo "  BIAS DETECTION RESULTS"
+        echo "  📊 BIAS DETECTION RESULTS"
         echo "============================================================"
         echo "User-Profile Max Disparity: ${MAX_DISPARITY}"
+        echo "User-Profile Bias Count: ${BIAS_COUNT}"
         echo "Field Fairness Ratio: ${FIELD_RATIO}"
-        echo "Alert Threshold: ${ALERT_THRESHOLD}"
-        echo "Critical Threshold: ${CRITICAL_THRESHOLD}"
-        echo "Field Threshold: ${FIELD_THRESHOLD}"
+        echo ""
+        echo "Thresholds:"
+        echo "  - Alert: ${ALERT_THRESHOLD} (20%)"
+        echo "  - Critical (BLOCKS): ${CRITICAL_THRESHOLD} (30%)"
+        echo "  - Field Min: ${FIELD_THRESHOLD} (80%)"
         echo "============================================================"
         echo ""
 
+        # Check user-profile bias
         if (( $(echo "$MAX_DISPARITY >= $CRITICAL_THRESHOLD" | bc -l) )); then
           echo "🚨 USER-PROFILE BIAS: CRITICAL!"
           echo "   Disparity ${MAX_DISPARITY} >= ${CRITICAL_THRESHOLD}"
+          echo "   This BLOCKS deployment!"
           echo ""
-          echo "⚠️  This would normally block deployment in production."
-          echo "   Currently set to WARNING only (non-blocking)."
-          echo ""
+          SHOULD_BLOCK=true
           echo "Action required:"
           echo "  1. Review bias reports in artifacts"
           echo "  2. Apply mitigation strategies"
@@ -227,6 +256,22 @@ jobs:
 
         echo ""
         echo "============================================================"
+        
+        # BLOCK DEPLOYMENT IF CRITICAL BIAS DETECTED
+        if [ "$SHOULD_BLOCK" = "true" ]; then
+          echo ""
+          echo "❌ DEPLOYMENT BLOCKED DUE TO CRITICAL BIAS"
+          echo "============================================================"
+          echo ""
+          echo "Pipeline will FAIL to prevent biased model deployment."
+          echo "Fix the bias issues above and re-run the pipeline."
+          echo ""
+          exit 1
+        fi
+        
+        echo ""
+        echo "✅ Bias checks passed - deployment can proceed"
+        echo ""
 
     - name: Upload Bias Reports
       uses: actions/upload-artifact@v4
