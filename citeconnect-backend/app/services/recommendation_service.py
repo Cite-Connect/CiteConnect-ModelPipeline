@@ -24,21 +24,16 @@ logger = get_logger(__name__)
 class RecommendationService:
     """
     Service for generating personalized paper recommendations.
-    
     Supports:
     - Cold-start recommendations (profile-based)
     - Warm-start recommendations (interaction-based)
     - Multi-factor scoring
     - Ground truth validation
-    - Dual bias mitigation:
-      1. User-profile-based: Boosts scores for users in underperforming slices
-         (domain/stage/level) via bias_mitigation_config.json
-      2. Paper-field-based: Boosts papers from under-served research fields
-         via fairness_config.json and fairness_service
+    - Dual bias mitigation
     """
     
-    # Default scoring weights (tunable hyperparameters)
-    DEFAULT_COLD_START_WEIGHTS = {
+    # Unified Default Scoring Weights (for both Cold and Warm Start)
+    DEFAULT_WEIGHTS = {
         'semantic': 0.40,
         'citation': 0.20,
         'recency': 0.15,
@@ -47,14 +42,9 @@ class RecommendationService:
         'diversity': 0.05
     }
     
-    DEFAULT_WARM_START_WEIGHTS = {
-        'semantic': 0.35,
-        'citation_network': 0.25,
-        'collaborative': 0.15,
-        'temporal': 0.10,
-        'venue': 0.10,
-        'diversity': 0.05
-    }
+    # Deprecated specific defaults (kept for backward compatibility if needed, but unused)
+    DEFAULT_COLD_START_WEIGHTS = DEFAULT_WEIGHTS
+    DEFAULT_WARM_START_WEIGHTS = DEFAULT_WEIGHTS
     
     # Retrieval limits
     SEMANTIC_CANDIDATE_LIMIT = 150
@@ -64,9 +54,6 @@ class RecommendationService:
     def __init__(self, db: DatabaseConnection):
         """
         Initialize recommendation service.
-        
-        Args:
-            db: Database connection
         """
         self.db = db
         self.user_repo = UserRepository(db)
@@ -79,17 +66,9 @@ class RecommendationService:
         
         logger.info("RecommendationService initialized")
 
-    # -------------------------------------------------------------------------
-    # Bias mitigation config helpers
-    # -------------------------------------------------------------------------
-
+    # ... [Helper methods _load_bias_config and _get_mitigation_policy_for_profile remain unchanged] ...
     def _load_bias_config(self) -> Dict:
-        """
-        Load bias mitigation config from JSON, if present.
-
-        Expected path (from backend root):
-        citeconnect-backend/bias_config/bias_mitigation_config.json
-        """
+        """Load bias mitigation config from JSON, if present."""
         try:
             config_path = (
                 Path(__file__).parent.parent.parent
@@ -97,53 +76,18 @@ class RecommendationService:
                 / "bias_mitigation_config.json"
             )
             if not config_path.exists():
-                logger.info(
-                    "No bias mitigation config found – running without mitigation",
-                    path=str(config_path),
-                )
+                logger.info("No bias mitigation config found – running without mitigation")
                 return {}
             with config_path.open("r") as f:
                 cfg = json.load(f)
-            logger.info(
-                "Loaded bias mitigation config",
-                path=str(config_path),
-            )
+            logger.info("Loaded bias mitigation config", path=str(config_path))
             return cfg
         except Exception as e:
             logger.warning(f"Failed to load bias mitigation config: {e}")
             return {}
 
     def _get_mitigation_policy_for_profile(self, profile: Dict, model: str = 'minilm', is_cold_start: bool = True) -> Dict:
-        """
-        Compute mitigation policy for this user from bias_config.
-        
-        Config structure expected:
-        {
-          "cold_start": {
-            "minilm": {
-              "primary_domain": {
-                "underperforming_slices": ["fintech"],
-                "boost_factor": 1.25,
-                "min_score_floor": 0.252
-              },
-              ...
-            }
-          }
-        }
-
-        Args:
-            profile: User profile dict
-            model: Model name ('minilm' or 'specter')
-            is_cold_start: Whether this is cold-start mode
-            
-        Returns:
-            {
-              "factor": float,
-              "weight_multipliers": {"semantic": 1.0, "ground_truth": 1.2, ...},
-              "min_score_threshold": float | None,
-              "applied_rules": [...]
-            }
-        """
+        """Compute mitigation policy for this user from bias_config."""
         policy = {
             "factor": 1.0,
             "weight_multipliers": {},
@@ -155,8 +99,6 @@ class RecommendationService:
             return policy
 
         cfg = self.bias_config
-        
-        # Map model name to config key
         model_key_map = {
             'all-MiniLM-L6-v2': 'minilm',
             'minilm': 'minilm',
@@ -164,46 +106,30 @@ class RecommendationService:
             'specter2': 'specter'
         }
         model_key = model_key_map.get(model, 'minilm')
-        
-        # Navigate to the correct config section
         mode_key = "cold_start" if is_cold_start else "warm_start"
         
-        if mode_key not in cfg:
-            return policy
-            
+        if mode_key not in cfg: return policy
         mode_cfg = cfg[mode_key]
-        if model_key not in mode_cfg:
-            return policy
-            
+        if model_key not in mode_cfg: return policy
         model_cfg = mode_cfg[model_key]
         
-        # Fields to check (matching the slicing dimensions)
         fields_to_check = ["primary_domain", "research_stage", "reading_level"]
         
-        # For each field, check if user's value is in underperforming_slices
         for field in fields_to_check:
             user_value = profile.get(field)
-            if not user_value:
-                continue
+            if not user_value: continue
                 
-            # Get field config (e.g., model_cfg["primary_domain"])
             field_cfg = model_cfg.get(field)
-            if not field_cfg:
-                continue
+            if not field_cfg: continue
                 
-            # Check if user's value is in underperforming_slices
             underperforming_slices = field_cfg.get("underperforming_slices", [])
-            if user_value not in underperforming_slices:
-                continue
+            if user_value not in underperforming_slices: continue
             
-            # Apply mitigation for this field
             boost_factor = field_cfg.get("boost_factor", 1.0)
             min_score_floor = field_cfg.get("min_score_floor")
             
-            # 1) Score multiplier (cumulative across multiple fields)
             policy["factor"] *= float(boost_factor)
             
-            # 2) Threshold - pick the most lenient (lowest) if multiple fields match
             if min_score_floor is not None:
                 th = float(min_score_floor)
                 if policy["min_score_threshold"] is None:
@@ -211,23 +137,33 @@ class RecommendationService:
                 else:
                     policy["min_score_threshold"] = min(policy["min_score_threshold"], th)
             
-            # Track applied rule
             policy["applied_rules"].append({
-                "field": field,
-                "value": user_value,
-                "boost_factor": boost_factor,
-                "min_score_floor": min_score_floor
+                "field": field, "value": user_value,
+                "boost_factor": boost_factor, "min_score_floor": min_score_floor
             })
             
-            logger.debug(
-                "Applied bias mitigation",
-                field=field,
-                value=user_value,
-                boost_factor=boost_factor,
-                min_score_floor=min_score_floor
-            )
-
         return policy
+
+    # -------------------------------------------------------------------------
+    # NEW HELPER: Fetch Personalized Weights
+    # -------------------------------------------------------------------------
+    async def _get_user_scoring_weights(self, user_id: int) -> Dict[str, float]:
+        """
+        Fetch personalized scoring weights for a user.
+        Falls back to DEFAULT_WEIGHTS if none exist.
+        """
+        try:
+            state = await self.user_repo.get_recommendation_state(user_id)
+            if state and state.get('scoring_weights'):
+                # Ensure it's a dict (handle potential JSON string if not auto-parsed)
+                weights = state['scoring_weights']
+                if isinstance(weights, str):
+                    return json.loads(weights)
+                return weights
+        except Exception as e:
+            logger.warning(f"Failed to fetch user weights for {user_id}, using defaults: {e}")
+        
+        return self.DEFAULT_WEIGHTS.copy()
 
     # -------------------------------------------------------------------------
     # Public API
@@ -243,15 +179,6 @@ class RecommendationService:
         """
         Main entry point for generating recommendations.
         Routes to cold-start or warm-start based on user's stage.
-        
-        Args:
-            user_id: User identifier
-            count: Number of recommendations to return
-            model: Embedding model ('minilm' or 'specter')
-            scoring_weights: Optional custom weights
-            
-        Returns:
-            Dict with recommendations and metadata
         """
         logger.info(
             "Generating recommendations",
@@ -260,40 +187,23 @@ class RecommendationService:
             model=model
         )
         
-        # Get user's recommendation state
         state = await self.user_repo.get_recommendation_state(user_id)
         
         if not state:
             raise ValueError(f"No recommendation state found for user {user_id}")
         
-        # Route based on stage
         stage = state['recommendation_stage']
         interaction_count = state['interaction_count']
         
         if interaction_count < 10:
-            logger.info(
-                "Using cold-start strategy",
-                user_id=user_id,
-                stage=stage
-            )
+            logger.info("Using cold-start strategy", user_id=user_id, stage=stage)
             return await self.generate_cold_start_recommendations(
-                user_id=user_id,
-                count=count,
-                model=model,
-                scoring_weights=scoring_weights
+                user_id=user_id, count=count, model=model, scoring_weights=scoring_weights
             )
         else:
-            logger.info(
-                "Using warm-start strategy",
-                user_id=user_id,
-                stage=stage,
-                interactions=interaction_count
-            )
+            logger.info("Using warm-start strategy", user_id=user_id, stage=stage, interactions=interaction_count)
             return await self.generate_warm_start_recommendations(
-                user_id=user_id,
-                count=count,
-                model=model,
-                scoring_weights=scoring_weights
+                user_id=user_id, count=count, model=model, scoring_weights=scoring_weights
             )
     
     async def generate_cold_start_recommendations(
@@ -305,225 +215,128 @@ class RecommendationService:
     ) -> Dict[str, Any]:
         """
         Generate recommendations for cold-start users (0-9 interactions).
-        Uses profile-based embeddings and ground truth boost.
-        
-        Args:
-            user_id: User identifier
-            count: Number of recommendations
-            model: Embedding model to use
-            scoring_weights: Optional custom weights
-            
-        Returns:
-            Dict with recommendations and metadata
         """
-        logger.info(
-            "Generating cold-start recommendations",
-            user_id=user_id,
-            count=count,
-            model=model
-        )
+        logger.info("Generating cold-start recommendations", user_id=user_id, count=count, model=model)
         
-        # Use default weights if not provided
-        weights = scoring_weights or self.DEFAULT_COLD_START_WEIGHTS
+        # CHANGE 1: Use personalized weights if not explicitly overridden
+        if scoring_weights:
+            weights = scoring_weights
+        else:
+            weights = await self._get_user_scoring_weights(user_id)
         
-        # Step 1: Get user data
         profile = await self.user_repo.get_profile(user_id)
-        if not profile:
-            raise ValueError(f"No profile found for user {user_id}")
-        
+        if not profile: raise ValueError(f"No profile found for user {user_id}")
         interests = await self.user_repo.get_user_interests(user_id)
 
-        # NEW: compute mitigation policy for this user
-        mitigation_policy = self._get_mitigation_policy_for_profile(
-            profile=profile,
-            model=model,
-            is_cold_start=True
-        )
+        mitigation_policy = self._get_mitigation_policy_for_profile(profile=profile, model=model, is_cold_start=True)
         
-        # Step 2: Get user embedding
         embeddings = await self.user_embedding_service.get_or_generate_user_embeddings(user_id)
-        model_key_map = {
-        'all-MiniLM-L6-v2': 'minilm',
-        'minilm': 'minilm',
-        'specter': 'specter',
-        'specter2': 'specter'
-    }
-        embedding_model_key = model_key_map.get(model, 'minilm')
+        model_key_map = {'all-MiniLM-L6-v2': 'minilm', 'minilm': 'minilm', 'specter': 'specter', 'specter2': 'specter'}
         embedding_key = model_key_map.get(model, 'minilm')
-    
+        
         if embedding_key not in embeddings:
-            logger.error(
-                "Model embedding not found",
-                requested_model=model,
-                embedding_key=embedding_key,
-                available_keys=list(embeddings.keys())
-            )
-            raise ValueError(f"Model '{model}' not available. Available: {list(embeddings.keys())}")
-        
+            raise ValueError(f"Model '{model}' not available.")
         user_embedding = embeddings[embedding_key]
-        
-        
-        # Step 3: Retrieve candidates (3 strategies)
-        logger.debug("Retrieving candidates", user_id=user_id)
         
         # 3A: Semantic search
         semantic_candidates = await self._retrieve_semantic_candidates(
-            user_embedding=user_embedding,
-            domain=profile['primary_domain'],
-            model=model,
-            limit=self.SEMANTIC_CANDIDATE_LIMIT
+            user_embedding=user_embedding, domain=profile['primary_domain'],
+            model=model, limit=self.SEMANTIC_CANDIDATE_LIMIT
         )
         
         # 3B: Canonical papers
         canonical_candidates = await self._retrieve_canonical_candidates(
-            domain=profile['primary_domain'],
-            user_stage=profile.get('research_stage', 'phd'),
+            domain=profile['primary_domain'], user_stage=profile.get('research_stage', 'phd'),
             count=self.CANONICAL_CANDIDATE_COUNT
         )
         
-        # 3C: Ground truth network papers
+        # 3C: Ground truth network
         gt_candidates = await self._retrieve_ground_truth_candidates(
             user_interests=[i['interest_term'] for i in interests],
-            domain=profile['primary_domain'],
-            count=self.GT_NETWORK_CANDIDATE_COUNT
+            domain=profile['primary_domain'], count=self.GT_NETWORK_CANDIDATE_COUNT
         )
         
-        # Merge and deduplicate
-        all_candidates = self._merge_candidates(
-            semantic_candidates,
-            canonical_candidates,
-            gt_candidates
-        )
+        all_candidates = self._merge_candidates(semantic_candidates, canonical_candidates, gt_candidates)
         
-        logger.info(
-            "Candidates retrieved",
-            user_id=user_id,
-            total_candidates=len(all_candidates),
-            semantic=len(semantic_candidates),
-            canonical=len(canonical_candidates),
-            ground_truth=len(gt_candidates)
-        )
-        
-        # Step 4: Apply multi-factor scoring (WITH mitigation)
         scored_papers = await self._apply_multi_factor_scoring(
-            candidates=all_candidates,
-            user=profile,
-            user_interests=interests,
-            scoring_weights=weights,
-            is_cold_start=True,
-            mitigation_policy=mitigation_policy,
-            apply_bias_mitigation=True,
+            candidates=all_candidates, user=profile, user_interests=interests,
+            scoring_weights=weights, is_cold_start=True, mitigation_policy=mitigation_policy, apply_bias_mitigation=True,
         )
         
-        # Step 5: Apply diversity filtering and select top N
-        # We want 21 papers for clustering (3 clusters × 7 papers)
-        diverse_papers = await self._apply_diversity_filtering(
-            scored_papers=scored_papers,
-            target_count=21,
-            max_per_author=2,
-            max_per_venue=2
-        )
-        
-        # Step 6: Take top 'count' papers
+        diverse_papers = await self._apply_diversity_filtering(scored_papers=scored_papers, target_count=21)
         final_recommendations = diverse_papers[:count]
-        
-        # Step 7: Enrich with explanations
-        enriched = self._enrich_recommendations(
-            papers=final_recommendations,
-            user_interests=[i['interest_term'] for i in interests]
-        )
-        
-        # Step 8: Apply field-based fairness reranking (paper-level fairness)
+        enriched = self._enrich_recommendations(papers=final_recommendations, user_interests=[i['interest_term'] for i in interests])
         fairness_reranked = self._apply_fairness_reranking(enriched)
         
-        logger.info(
-            "Cold-start recommendations generated",
-            user_id=user_id,
-            count=len(fairness_reranked),
-            avg_score=np.mean([p['final_score'] for p in fairness_reranked]) if fairness_reranked else 0.0
-        )
-        
         return {
-            'user_id': user_id,
-            'papers': fairness_reranked,
-            'method': 'cold_start',
-            'model_used': model,
-            'scoring_weights': weights,
-            'generated_at': datetime.utcnow().isoformat(),
-            'total_candidates': len(all_candidates),
-            'mitigation_policy': mitigation_policy,
+            'user_id': user_id, 'papers': fairness_reranked, 'method': 'cold_start',
+            'model_used': model, 'scoring_weights': weights, 'generated_at': datetime.utcnow().isoformat(),
+            'total_candidates': len(all_candidates), 'mitigation_policy': mitigation_policy,
         }
-    
+
     async def generate_warm_start_recommendations(
         self,
         user_id: int,
         count: int = 10,
         model: str = 'minilm',
-        scoring_weights: Optional[Dict[str, float]] = None
+        scoring_weights: Optional[Dict[str, float]] = None,
+        context_paper_ids: Optional[List[str]] = None  # <--- OFFLINE PARAM
     ) -> Dict[str, Any]:
         """
         Generate recommendations for warm-start users (10+ interactions).
-        Uses interaction-based embeddings and citation networks.
-        
-        Args:
-            user_id: User identifier
-            count: Number of recommendations
-            model: Embedding model to use
-            scoring_weights: Optional custom weights
-            
-        Returns:
-            Dict with recommendations and metadata
         """
         logger.info(
             "Generating warm-start recommendations",
             user_id=user_id,
             count=count,
-            model=model
+            model=model,
+            mode="offline_eval" if context_paper_ids is not None else "production"
         )
         
-        # Use default weights if not provided
-        weights = scoring_weights or self.DEFAULT_WARM_START_WEIGHTS
+        saved_paper_ids = []
         
-        # Get user data
+        # CHANGE 2: Use personalized weights if not explicitly overridden
+        if scoring_weights:
+            weights = scoring_weights
+        else:
+            weights = await self._get_user_scoring_weights(user_id)
+        
         profile = await self.user_repo.get_profile(user_id)
 
-        # NEW: mitigation policy for warm-start users too
         mitigation_policy = self._get_mitigation_policy_for_profile(
             profile=profile,
             model=model,
             is_cold_start=False
         )
         
-        # Get user's interaction history
-        saved_papers = await self._get_user_saved_papers(user_id)
+        # 1. CONTEXT DETERMINATION
+        if context_paper_ids is not None:
+            # OFFLINE MODE
+            saved_paper_ids = context_paper_ids
+        else:
+            # PRODUCTION MODE
+            saved_papers_rows = await self._get_user_saved_papers(user_id)
+            saved_paper_ids = [p['paper_id'] for p in saved_papers_rows]
         
-        # Get user embedding (should be interaction-based or hybrid)
-    
-
+        # Get user embedding
         embeddings = await self.user_embedding_service.get_or_generate_user_embeddings(user_id)
         model_key_map = {
-        'all-MiniLM-L6-v2': 'minilm',
-        'minilm': 'minilm',
-        'specter': 'specter',
-        'specter2': 'specter'
-            }
-        
+            'all-MiniLM-L6-v2': 'minilm',
+            'minilm': 'minilm',
+            'specter': 'specter',
+            'specter2': 'specter'
+        }
         embedding_key = model_key_map.get(model, 'minilm')
-        if embedding_key not in embeddings:
-            logger.error(
-                "Model embedding not found",
-                requested_model=model,
-                embedding_key=embedding_key,
-                available_keys=list(embeddings.keys())
-            )
-            raise ValueError(f"Model '{model}' not available. Available: {list(embeddings.keys())}")
-    
-        user_embedding = embeddings[embedding_key]  # ← Use mapped key
         
-        # Retrieve candidates (4 strategies for warm-start)
+        if embedding_key not in embeddings:
+            raise ValueError(f"Model '{model}' not available.")
+    
+        user_embedding = embeddings[embedding_key]
+        
+        # Retrieve candidates
         logger.debug("Retrieving warm-start candidates", user_id=user_id)
         
-        # Strategy A: Semantic (200 candidates)
+        # Strategy A: Semantic
         semantic_candidates = await self._retrieve_semantic_candidates(
             user_embedding=user_embedding,
             domain=profile['primary_domain'],
@@ -531,14 +344,13 @@ class RecommendationService:
             limit=200
         )
         
-        # Strategy B: Citation network (50 candidates)
+        # Strategy B: Citation network
         citation_candidates = await self._retrieve_citation_network_candidates(
-            paper_ids=[p['paper_id'] for p in saved_papers],
+            paper_ids=saved_paper_ids, 
             limit=50
         )
         
-        # Strategy C: Collaborative filtering (30 candidates)
-        # Find similar users and get their saved papers
+        # Strategy C: Collaborative
         collaborative_candidates = await self._retrieve_collaborative_candidates(
             user_id=user_id,
             user_embedding=user_embedding,
@@ -546,7 +358,7 @@ class RecommendationService:
             limit=30
         )
         
-        # Strategy D: Temporal (20 candidates)
+        # Strategy D: Temporal
         temporal_candidates = await self._retrieve_temporal_candidates(
             domain=profile['primary_domain'],
             sub_domains=profile.get('sub_domains', []),
@@ -561,8 +373,14 @@ class RecommendationService:
             temporal_candidates
         )
         
-        # Filter out papers user already interacted with
-        all_candidates = await self._filter_seen_papers(all_candidates, user_id)
+        # 2. FILTERING LOGIC
+        if context_paper_ids is not None:
+            # OFFLINE MODE
+            seen_set = set(context_paper_ids)
+            all_candidates = [p for p in all_candidates if p['paper_id'] not in seen_set]
+        else:
+            # PRODUCTION MODE
+            all_candidates = await self._filter_seen_papers(all_candidates, user_id)
         
         logger.info(
             "Warm-start candidates retrieved",
@@ -570,11 +388,11 @@ class RecommendationService:
             total=len(all_candidates)
         )
         
-        # Apply scoring (WITH mitigation)
+        # Apply scoring
         scored_papers = await self._apply_multi_factor_scoring(
             candidates=all_candidates,
             user=profile,
-            user_interests=None,  # Not used for warm-start
+            user_interests=None,
             scoring_weights=weights,
             is_cold_start=False,
             mitigation_policy=mitigation_policy,
@@ -589,23 +407,14 @@ class RecommendationService:
             max_per_venue=3
         )
         
-        # Select top N
         final_recommendations = diverse_papers[:count]
         
-        # Enrich
         enriched = self._enrich_recommendations(
             papers=final_recommendations,
             user_interests=None
         )
         
-        # Apply field-based fairness reranking (paper-level fairness)
         fairness_reranked = self._apply_fairness_reranking(enriched)
-        
-        logger.info(
-            "Warm-start recommendations generated",
-            user_id=user_id,
-            count=len(fairness_reranked)
-        )
         
         return {
             'user_id': user_id,
@@ -658,9 +467,9 @@ class RecommendationService:
         embedding_key = model_key_map.get(model, 'minilm')
         user_embedding = embeddings[embedding_key]
         
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         # PHASE 1: Keyword Search (Fast, Precise)
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         logger.debug("Phase 1: Keyword search")
         keyword_results_raw = await self.paper_repo.search_by_text(
             search_text=search_query,
@@ -691,9 +500,9 @@ class RecommendationService:
             avg_score=np.mean([p['keyword_score'] for p in keyword_results]) if keyword_results else 0
         )
         
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         # PHASE 2: Semantic Search (Contextual)
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         logger.debug("Phase 2: Semantic search")
         
         # Import embedding service
@@ -713,13 +522,13 @@ class RecommendationService:
             embedding_shape=query_embedding.shape
         )
         
-        # Semantic search
+        # CHANGE: Increased limit and min_similarity
         semantic_results_raw = await self.paper_repo.semantic_search(
             embedding=query_embedding,
             model=embedding_key,
             domain=profile['primary_domain'],
-            limit=50,
-            min_similarity=0.2
+            limit=100,              # Increased from 50
+            min_similarity=0.25     # Increased from 0.2 for better quality
         )
         
         # FIX: Convert to dict
@@ -736,9 +545,9 @@ class RecommendationService:
             avg_similarity=np.mean([p['semantic_score'] for p in semantic_results]) if semantic_results else 0
         )
         
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         # PHASE 3: Profile-Based Candidates (Personalization)
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         logger.debug("Phase 3: Profile-based retrieval")
         
         profile_results_raw = await self._retrieve_semantic_candidates(
@@ -762,9 +571,9 @@ class RecommendationService:
             results=len(profile_results)
         )
         
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         # PHASE 4: Merge and Deduplicate
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         logger.debug("Phase 4: Merging results")
         
         all_candidates = {}
@@ -790,8 +599,24 @@ class RecommendationService:
             paper_id = paper['paper_id']
             if paper_id in all_candidates:
                 all_candidates[paper_id]['profile_score'] = paper['profile_score']
+                # Update match source to reflect profile presence
+                current_source = all_candidates[paper_id]['match_source']
+                if 'profile' not in current_source:
+                    all_candidates[paper_id]['match_source'] = current_source + '+profile'
             else:
                 all_candidates[paper_id] = paper
+        
+        # CHANGE: Calculate multi-source boost
+        for paper_id, paper in all_candidates.items():
+            match_source = paper.get('match_source', '')
+            
+            # Boost papers from multiple sources
+            if '+' in match_source:
+                source_count = len(match_source.split('+'))
+                # 10% boost per additional source
+                paper['multi_source_boost'] = 0.10 * (source_count - 1)
+            else:
+                paper['multi_source_boost'] = 0.0
         
         candidates_list = list(all_candidates.values())
         
@@ -804,39 +629,43 @@ class RecommendationService:
             multi_source=sum(1 for p in candidates_list if '+' in p.get('match_source', ''))
         )
         
-        # ────────────────────────────────────────────────────────
-        # PHASE 5: Hybrid Scoring
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
+        # PHASE 5: Hybrid Scoring (REBALANCED WEIGHTS)
+        # ────────────────────────────────────────────────────────────
         logger.debug("Phase 5: Hybrid scoring")
         
-        # Default search weights (search-heavy)
+        # CHANGE: Rebalanced weights to emphasize semantic + profile
         default_weights = {
-            'keyword': 0.50,
-            'semantic': 0.35,
-            'profile': 0.15
+            'keyword': 0.50,      # Reduced from 0.50
+            'semantic': 0.35,     # Increased from 0.35
+            'profile': 0.15       # Increased from 0.15
         }
         
         weights = scoring_weights or default_weights
         
         for paper in candidates_list:
-            # Fill missing scores with 0
+            # CHANGE: Higher minimum scores for missing components
             keyword_score = paper.get('keyword_score', 0.0)
-            semantic_score = paper.get('semantic_score', 0.0)
-            profile_score = paper.get('profile_score', 0.0)
+            semantic_score = paper.get('semantic_score', 0.15)  # Increased from 0.05
+            profile_score = paper.get('profile_score', 0.10)    # Increased from 0.01
             
-            # Calculate final score
-            paper['final_score'] = (
+            # Calculate base score
+            base_score = (
                 weights['keyword'] * keyword_score +
                 weights['semantic'] * semantic_score +
                 weights['profile'] * profile_score
             )
+            
+            # CHANGE: Apply multi-source boost
+            multi_source_boost = paper.get('multi_source_boost', 0.0)
+            paper['final_score'] = base_score * (1.0 + multi_source_boost)
             
             # Store breakdown for explainability
             paper['score_breakdown'] = {
                 'keyword': keyword_score,
                 'semantic': semantic_score,
                 'profile': profile_score,
-                #'weights': weights
+                'multi_source_boost': multi_source_boost
             }
         
         # Sort by final score
@@ -846,12 +675,13 @@ class RecommendationService:
             "Hybrid scoring complete",
             total_candidates=len(candidates_list),
             avg_score=np.mean([p['final_score'] for p in candidates_list]) if candidates_list else 0,
-            max_score=candidates_list[0]['final_score'] if candidates_list else 0
+            max_score=candidates_list[0]['final_score'] if candidates_list else 0,
+            top_paper_breakdown=candidates_list[0]['score_breakdown'] if candidates_list else None
         )
         
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         # PHASE 6: Diversity Filtering
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         logger.debug("Phase 6: Applying diversity")
         
         diverse_papers = await self._apply_diversity_filtering(
@@ -861,9 +691,9 @@ class RecommendationService:
             max_per_venue=2
         )
         
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         # PHASE 7: Take Top N and Enrich
-        # ────────────────────────────────────────────────────────
+        # ────────────────────────────────────────────────────────────
         final_recommendations = diverse_papers[:count]
         
         # Enrich with explanations
@@ -882,7 +712,8 @@ class RecommendationService:
             search_query=search_query[:50],
             count=len(fairness_reranked),
             avg_score=np.mean([p['final_score'] for p in fairness_reranked]) if fairness_reranked else 0,
-            sample_explanation=fairness_reranked[0].get('relevance_explanation') if fairness_reranked else None
+            sample_explanation=fairness_reranked[0].get('relevance_explanation') if fairness_reranked else None,
+            sample_breakdown=fairness_reranked[0].get('score_breakdown') if fairness_reranked else None
         )
         
         return {
@@ -1709,6 +1540,8 @@ class RecommendationService:
         Returns:
             Normalized score (0.0-1.0)
         """
+        if year is None: return 0.5
+
         if not citation_count or citation_count == 0 or not max_citations:
             return 0.0
         

@@ -19,7 +19,7 @@ def print_section(title):
 def test_generate_recommendations():
     print_section("Generate Recommendations (POST /)")
     
-    url = f"{BASE_URL}{API_PREFIX}"
+    url = f"{BASE_URL}{API_PREFIX}/test"
     payload = {
         "user_id": USER_ID,
         "count": 5,

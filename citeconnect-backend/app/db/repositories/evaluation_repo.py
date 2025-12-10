@@ -5,7 +5,7 @@ Handles storage and retrieval of cold-start and warm-start evaluations.
 from typing import List, Optional, Dict, Any
 import asyncpg
 from datetime import datetime, timedelta
-
+import json
 from app.db.repositories.base import BaseRepository
 from app.db.connection import DatabaseConnection
 from app.utils.logger import get_logger
@@ -24,6 +24,10 @@ class EvaluationRepository(BaseRepository):
         super().__init__(db)
         logger.info("EvaluationRepository initialized")
     
+    # ---------------------------------------------------------
+    # Cold Start Methods
+    # ---------------------------------------------------------
+
     async def save_cold_start_evaluation(
         self,
         user_id: int,
@@ -36,55 +40,64 @@ class EvaluationRepository(BaseRepository):
         """
         Save cold-start evaluation result.
         
-        Args:
-            user_id: User identifier
-            embedding_model: Model used ('all-MiniLM-L6-v2' or 'specter2')
-            profile_alignment: Profile alignment score (0-1)
-            ground_truth_quality: Ground truth quality score (0-1)
-            recommendation_count: Number of recommendations evaluated
-            metadata: Optional additional metadata
-            
-        Returns:
-            Record: Created evaluation record
+        Note: 'combined_score' is omitted from the INSERT because it is 
+        defined as GENERATED ALWAYS in the schema.
         """
         logger.debug(
             "Saving cold-start evaluation",
             user_id=user_id,
             model=embedding_model,
-            profile_alignment=profile_alignment,
-            ground_truth_quality=ground_truth_quality
+            profile_alignment=profile_alignment
         )
         
-        query = """
-            INSERT INTO cold_start_evaluations (
-                user_id,
-                embedding_model,
-                profile_alignment,
-                ground_truth_quality,
-                recommendation_count,
-                evaluation_timestamp
+        # We explicitly handle metadata if provided, otherwise default to NULL (or empty dict depending on DB default)
+        # Using specific query structure to handle the optional metadata
+        if metadata:
+            query = """
+                INSERT INTO cold_start_evaluations (
+                    user_id,
+                    embedding_model,
+                    profile_alignment,
+                    ground_truth_quality,
+                    recommendation_count,
+                    evaluation_timestamp,
+                    evaluation_metadata
+                )
+                VALUES ($1, $2, $3, $4, $5, NOW(), $6)
+                RETURNING evaluation_id, combined_score
+            """
+            params = (
+                user_id, embedding_model, profile_alignment, 
+                ground_truth_quality, recommendation_count, metadata
             )
-            VALUES ($1, $2, $3, $4, $5, NOW())
-            RETURNING evaluation_id, combined_score
-        """
+        else:
+            query = """
+                INSERT INTO cold_start_evaluations (
+                    user_id,
+                    embedding_model,
+                    profile_alignment,
+                    ground_truth_quality,
+                    recommendation_count,
+                    evaluation_timestamp
+                )
+                VALUES ($1, $2, $3, $4, $5, NOW())
+                RETURNING evaluation_id, combined_score
+            """
+            params = (
+                user_id, embedding_model, profile_alignment, 
+                ground_truth_quality, recommendation_count
+            )
         
         try:
-            result = await self.db.fetchrow(
-                query,
-                user_id,
-                embedding_model,
-                profile_alignment,
-                ground_truth_quality,
-                recommendation_count
-            )
+            result = await self.db.fetchrow(query, *params)
             
             logger.info(
                 "Cold-start evaluation saved",
                 evaluation_id=result['evaluation_id'],
                 user_id=user_id,
+                # combined_score is returned from DB generation
                 combined_score=result['combined_score']
             )
-            
             return result
             
         except Exception as e:
@@ -95,30 +108,149 @@ class EvaluationRepository(BaseRepository):
                 exc_info=True
             )
             raise
-    
+
+    async def get_cold_start_users_for_evaluation(self) -> List[int]:
+        """Fetch all users ready for cold-start evaluation."""
+        query = """
+            SELECT user_id
+            FROM user_recommendation_state
+            WHERE recommendation_stage = 'cold_start'
+              AND user_id IN (SELECT user_id FROM user_profiles_extended)
+            ORDER BY user_id
+        """
+        results = await self.db.fetch(query)
+        return [r['user_id'] for r in results]
+
+    # ---------------------------------------------------------
+    # Warm Start Methods
+    # ---------------------------------------------------------
+
+    async def save_warm_start_evaluation(
+        self,
+        user_id: int,
+        precision_at_10: float,
+        recall_at_10: float,
+        ndcg_at_10: float,
+        estimated_ctr: float,
+        recommended_paper_ids: List[str],
+        metadata: Dict[str, Any]
+    ) -> asyncpg.Record:
+        """Save warm-start evaluation result."""
+        query = """
+            INSERT INTO warm_start_evaluation (
+                user_id,
+                precision_at_10,
+                recall_at_10,
+                ndcg_at_10,
+                estimated_ctr,
+                recommended_paper_ids,
+                evaluation_metadata,
+                evaluated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
+            RETURNING evaluation_id
+        """
+        try:
+            metadata_json = json.dumps(metadata)
+            result = await self.db.fetchrow(
+                query,
+                user_id, precision_at_10, recall_at_10, ndcg_at_10,
+                estimated_ctr, recommended_paper_ids, metadata_json
+            )
+            logger.debug("Warm-start evaluation saved", evaluation_id=result['evaluation_id'])
+            return result
+        except Exception as e:
+            logger.error("Failed to save warm-start evaluation", error=str(e))
+            raise
+
+    async def get_user_saved_paper_ids(self, user_id: int) -> List[str]:
+        """Get IDs of papers saved by the user (proxy for ground truth)."""
+        query = "SELECT paper_id FROM user_saved_papers WHERE user_id = $1"
+        results = await self.db.fetch(query, user_id)
+        return [r['paper_id'] for r in results]
+
+    # ---------------------------------------------------------
+    # Ground Truth & Helper Methods
+    # ---------------------------------------------------------
+
+    async def find_relevant_ground_truth_papers(
+        self,
+        user_interests: List[str],
+        domain: str,
+        limit: int = 10
+    ) -> List[str]:
+        """Find ground truth papers matching interests and domain."""
+        if not user_interests:
+            return []
+
+        # Build search conditions dynamically
+        # Note: We manually build the OR clause here. 
+        # In a production environment with untrusted input, verify `interest` is safe 
+        # or use specialized text search features (tsvector) instead of ILIKE.
+        conditions = []
+        for interest in user_interests:
+            # Basic sanitization for SQL string literal
+            safe_interest = interest.replace("'", "''")
+            conditions.append(f"title ILIKE '%{safe_interest}%'")
+            conditions.append(f"abstract ILIKE '%{safe_interest}%'")
+        
+        where_clause = ' OR '.join(conditions)
+        
+        query = f"""
+            SELECT gtp.paper_id
+            FROM ground_truth_papers gtp
+            JOIN papers p ON gtp.paper_id = p.paper_id
+            WHERE gtp.domain = $1
+              AND ({where_clause})
+            ORDER BY gtp.quality_score DESC
+            LIMIT $2
+        """
+        results = await self.db.fetch(query, domain, limit)
+        return [r['paper_id'] for r in results]
+
+    # ---------------------------------------------------------
+    # Reporting & Analysis Methods
+    # ---------------------------------------------------------
+
+    async def get_recent_evaluations(
+        self, 
+        evaluation_type: str, 
+        limit: int = 100
+    ) -> List[asyncpg.Record]:
+        """Get most recent evaluations globally."""
+        if evaluation_type == 'cold_start':
+            query = """
+                SELECT 
+                    profile_alignment,
+                    ground_truth_quality,
+                    combined_score,
+                    evaluation_timestamp as evaluated_at,
+                    evaluation_metadata
+                FROM cold_start_evaluations
+                ORDER BY evaluation_timestamp DESC
+                LIMIT $1
+            """
+        else:
+            query = """
+                SELECT 
+                    precision_at_10,
+                    recall_at_10,
+                    ndcg_at_10,
+                    estimated_ctr,
+                    evaluated_at
+                FROM warm_start_evaluation
+                ORDER BY evaluated_at DESC
+                LIMIT $1
+            """
+        return await self.db.fetch(query, limit)
+
     async def get_evaluations_by_user(
         self,
         user_id: int,
         evaluation_type: str = 'cold_start',
         limit: int = 10
     ) -> List[asyncpg.Record]:
-        """
-        Get evaluation history for a user.
-        
-        Args:
-            user_id: User identifier
-            evaluation_type: 'cold_start' or 'warm_start'
-            limit: Maximum records to return
-            
-        Returns:
-            List of evaluation records
-        """
-        logger.debug(
-            "Getting user evaluations",
-            user_id=user_id,
-            type=evaluation_type
-        )
-        
+        """Get evaluation history for a user."""
         if evaluation_type == 'cold_start':
             query = """
                 SELECT *
@@ -130,46 +262,20 @@ class EvaluationRepository(BaseRepository):
         else:
             query = """
                 SELECT *
-                FROM warm_start_evaluations
+                FROM warm_start_evaluation
                 WHERE user_id = $1
-                ORDER BY evaluation_timestamp DESC
+                ORDER BY evaluated_at DESC
                 LIMIT $2
             """
-        
-        results = await self.db.fetch(query, user_id, limit)
-        
-        logger.debug(
-            "User evaluations retrieved",
-            user_id=user_id,
-            count=len(results)
-        )
-        
-        return results
-    
+        return await self.db.fetch(query, user_id, limit)
+
     async def get_aggregate_statistics(
         self,
         evaluation_type: str = 'cold_start',
         time_window_days: Optional[int] = None,
         embedding_model: Optional[str] = None
     ) -> Dict[str, Any]:
-        """
-        Get aggregate statistics for evaluations.
-        
-        Args:
-            evaluation_type: 'cold_start' or 'warm_start'
-            time_window_days: Optional time window filter
-            embedding_model: Optional model filter
-            
-        Returns:
-            Dict with aggregate statistics
-        """
-        logger.debug(
-            "Getting aggregate statistics",
-            type=evaluation_type,
-            time_window=time_window_days,
-            model=embedding_model
-        )
-        
+        """Get aggregate statistics for evaluations."""
         if evaluation_type == 'cold_start':
             query = """
                 SELECT 
@@ -199,22 +305,21 @@ class EvaluationRepository(BaseRepository):
             result = await self.db.fetchrow(query, *params)
             
             if result and result['total_evaluations'] > 0:
-                stats = {
+                # Helper to safely float conversion
+                def to_float(val): return float(val) if val is not None else 0.0
+                
+                return {
                     'total_evaluations': result['total_evaluations'],
-                    'avg_profile_alignment': float(result['avg_profile_alignment']) if result['avg_profile_alignment'] else 0.0,
-                    'avg_ground_truth_quality': float(result['avg_ground_truth_quality']) if result['avg_ground_truth_quality'] else 0.0,
-                    'avg_combined_score': float(result['avg_combined_score']) if result['avg_combined_score'] else 0.0,
-                    'std_combined_score': float(result['std_combined_score']) if result['std_combined_score'] else 0.0,
-                    'min_combined_score': float(result['min_combined_score']) if result['min_combined_score'] else 0.0,
-                    'max_combined_score': float(result['max_combined_score']) if result['max_combined_score'] else 0.0,
-                    'median_score': float(result['median_score']) if result['median_score'] else 0.0,
-                    'pass_rate': float(result['passed_count']) / float(result['total_evaluations']) if result['total_evaluations'] > 0 else 0.0
+                    'avg_profile_alignment': to_float(result['avg_profile_alignment']),
+                    'avg_ground_truth_quality': to_float(result['avg_ground_truth_quality']),
+                    'avg_combined_score': to_float(result['avg_combined_score']),
+                    'std_combined_score': to_float(result['std_combined_score']),
+                    'min_combined_score': to_float(result['min_combined_score']),
+                    'max_combined_score': to_float(result['max_combined_score']),
+                    'median_score': to_float(result['median_score']),
+                    'pass_rate': to_float(result['passed_count']) / float(result['total_evaluations'])
                 }
-            else:
-                stats = {
-                    'total_evaluations': 0,
-                    'message': 'No evaluations found'
-                }
+            return {'total_evaluations': 0, 'message': 'No evaluations found'}
         
         else:  # warm_start
             query = """
@@ -224,56 +329,29 @@ class EvaluationRepository(BaseRepository):
                     AVG(recall_at_10) as avg_recall,
                     AVG(ndcg_at_10) as avg_ndcg,
                     AVG(estimated_ctr) as avg_ctr
-                FROM warm_start_evaluations
+                FROM warm_start_evaluation
                 WHERE 1=1
             """
             
             if time_window_days:
-                query += f" AND evaluation_timestamp >= NOW() - INTERVAL '{time_window_days} days'"
+                query += f" AND evaluated_at >= NOW() - INTERVAL '{time_window_days} days'"
             
             result = await self.db.fetchrow(query)
             
             if result and result['total_evaluations'] > 0:
-                stats = {
+                def to_float(val): return float(val) if val is not None else 0.0
+                
+                return {
                     'total_evaluations': result['total_evaluations'],
-                    'avg_precision': float(result['avg_precision']) if result['avg_precision'] else 0.0,
-                    'avg_recall': float(result['avg_recall']) if result['avg_recall'] else 0.0,
-                    'avg_ndcg': float(result['avg_ndcg']) if result['avg_ndcg'] else 0.0,
-                    'avg_ctr': float(result['avg_ctr']) if result['avg_ctr'] else 0.0
+                    'avg_precision': to_float(result['avg_precision']),
+                    'avg_recall': to_float(result['avg_recall']),
+                    'avg_ndcg': to_float(result['avg_ndcg']),
+                    'avg_ctr': to_float(result['avg_ctr'])
                 }
-            else:
-                stats = {
-                    'total_evaluations': 0,
-                    'message': 'No evaluations found'
-                }
-        
-        logger.info(
-            "Aggregate statistics retrieved",
-            type=evaluation_type,
-            total=stats.get('total_evaluations', 0)
-        )
-        
-        return stats
-    
-    async def get_bias_analysis(
-        self,
-        segment_by: str = 'research_stage'
-    ) -> List[Dict[str, Any]]:
-        """
-        Get evaluation scores grouped by user segment for bias analysis.
-        
-        Args:
-            segment_by: Column to segment by ('research_stage', 'reading_level', 'primary_domain')
-            
-        Returns:
-            List of segment statistics
-        """
-        logger.info(
-            "Running bias analysis",
-            segment_by=segment_by
-        )
-        
-        # Validate segment_by to prevent SQL injection
+            return {'total_evaluations': 0, 'message': 'No evaluations found'}
+
+    async def get_bias_analysis(self, segment_by: str = 'research_stage') -> List[Dict[str, Any]]:
+        """Get evaluation scores grouped by user segment."""
         valid_segments = ['research_stage', 'reading_level', 'primary_domain']
         if segment_by not in valid_segments:
             raise ValueError(f"Invalid segment: {segment_by}. Must be one of {valid_segments}")
@@ -301,62 +379,24 @@ class EvaluationRepository(BaseRepository):
         
         segments = []
         for row in results:
-            segment = {
+            def to_float(val): return float(val) if val is not None else 0.0
+            
+            segments.append({
                 'segment_name': segment_by,
                 'segment_value': row['segment_value'],
                 'user_count': row['user_count'],
-                'avg_profile_alignment': float(row['avg_profile_alignment']) if row['avg_profile_alignment'] else 0.0,
-                'avg_ground_truth_quality': float(row['avg_ground_truth_quality']) if row['avg_ground_truth_quality'] else 0.0,
-                'avg_combined_score': float(row['avg_combined_score']) if row['avg_combined_score'] else 0.0,
-                'std_combined_score': float(row['std_combined_score']) if row['std_combined_score'] else 0.0,
-                'min_combined_score': float(row['min_combined_score']) if row['min_combined_score'] else 0.0,
-                'max_combined_score': float(row['max_combined_score']) if row['max_combined_score'] else 0.0,
-                'pass_rate': float(row['passed_count']) / float(row['total_count']) if row['total_count'] > 0 else 0.0
-            }
-            segments.append(segment)
-        
-        # Calculate bias metric (max - min scores)
-        if len(segments) > 1:
-            scores = [s['avg_combined_score'] for s in segments]
-            bias_magnitude = max(scores) - min(scores)
-            
-            logger.info(
-                "Bias analysis complete",
-                segment_by=segment_by,
-                bias_magnitude=bias_magnitude,
-                segment_count=len(segments)
-            )
-        else:
-            bias_magnitude = 0.0
-        
-        return {
-            'segment_by': segment_by,
-            'segments': segments,
-            'bias_magnitude': round(bias_magnitude, 4),
-            'bias_detected': bias_magnitude > 0.20
-        }
-    
-    async def get_model_comparison(
-        self,
-        model_a: str = 'all-MiniLM-L6-v2',
-        model_b: str = 'specter2'
-    ) -> Dict[str, Any]:
-        """
-        Compare evaluation scores between two models.
-        
-        Args:
-            model_a: First model name
-            model_b: Second model name
-            
-        Returns:
-            Comparison statistics
-        """
-        logger.info(
-            "Comparing models",
-            model_a=model_a,
-            model_b=model_b
-        )
-        
+                'avg_profile_alignment': to_float(row['avg_profile_alignment']),
+                'avg_ground_truth_quality': to_float(row['avg_ground_truth_quality']),
+                'avg_combined_score': to_float(row['avg_combined_score']),
+                'std_combined_score': to_float(row['std_combined_score']),
+                'min_combined_score': to_float(row['min_combined_score']),
+                'max_combined_score': to_float(row['max_combined_score']),
+                'pass_rate': to_float(row['passed_count']) / float(row['total_count']) if row['total_count'] > 0 else 0.0
+            })
+        return segments
+
+    async def get_model_comparison(self, model_a: str, model_b: str) -> Dict[str, Any]:
+        """Compare evaluation scores between two models."""
         query = """
             SELECT 
                 embedding_model,
@@ -372,20 +412,17 @@ class EvaluationRepository(BaseRepository):
         
         results = await self.db.fetch(query, model_a, model_b)
         
-        comparison = {
-            'model_a': model_a,
-            'model_b': model_b,
-            'results': {}
-        }
+        comparison = {'model_a': model_a, 'model_b': model_b, 'results': {}}
         
         for row in results:
-            model_name = row['embedding_model']
-            comparison['results'][model_name] = {
+            def to_float(val): return float(val) if val is not None else 0.0
+            
+            comparison['results'][row['embedding_model']] = {
                 'evaluation_count': row['evaluation_count'],
-                'avg_profile_alignment': float(row['avg_profile_alignment']) if row['avg_profile_alignment'] else 0.0,
-                'avg_ground_truth_quality': float(row['avg_ground_truth_quality']) if row['avg_ground_truth_quality'] else 0.0,
-                'avg_combined_score': float(row['avg_combined_score']) if row['avg_combined_score'] else 0.0,
-                'std_combined_score': float(row['std_combined_score']) if row['std_combined_score'] else 0.0
+                'avg_profile_alignment': to_float(row['avg_profile_alignment']),
+                'avg_ground_truth_quality': to_float(row['avg_ground_truth_quality']),
+                'avg_combined_score': to_float(row['avg_combined_score']),
+                'std_combined_score': to_float(row['std_combined_score'])
             }
         
         # Determine winner
@@ -410,243 +447,11 @@ class EvaluationRepository(BaseRepository):
             comparison['winner'] = 'insufficient_data'
             comparison['confidence'] = 'none'
         
-        logger.info(
-            "Model comparison complete",
-            winner=comparison.get('winner'),
-            score_diff=comparison.get('score_difference')
-        )
-        
         return comparison
-    
-    async def get_evaluations_by_segment(
-        self,
-        segment_field: str,
-        segment_value: str,
-        limit: int = 100
-    ) -> List[asyncpg.Record]:
-        """
-        Get evaluations for a specific user segment.
-        
-        Args:
-            segment_field: Field to filter by ('research_stage', 'reading_level', 'primary_domain')
-            segment_value: Value to filter for
-            limit: Maximum records
-            
-        Returns:
-            List of evaluation records
-        """
-        valid_fields = ['research_stage', 'reading_level', 'primary_domain']
-        if segment_field not in valid_fields:
-            raise ValueError(f"Invalid segment field: {segment_field}")
-        
-        query = f"""
-            SELECT e.*
-            FROM cold_start_evaluations e
-            JOIN user_profiles_extended p ON e.user_id = p.user_id
-            WHERE p.{segment_field} = $1
-            ORDER BY e.evaluation_timestamp DESC
-            LIMIT $2
-        """
-        
-        results = await self.db.fetch(query, segment_value, limit)
-        
-        logger.debug(
-            "Segment evaluations retrieved",
-            segment=f"{segment_field}={segment_value}",
-            count=len(results)
-        )
-        
-        return results
-    
-    async def get_time_series_data(
-        self,
-        days: int = 30,
-        model: Optional[str] = None
-    ) -> List[Dict[str, Any]]:
-        """
-        Get evaluation scores over time for trend analysis.
-        
-        Args:
-            days: Number of days to look back
-            model: Optional model filter
-            
-        Returns:
-            List of daily aggregated scores
-        """
-        logger.debug(
-            "Getting time series data",
-            days=days,
-            model=model
-        )
-        
-        query = """
-            SELECT 
-                DATE(evaluation_timestamp) as eval_date,
-                COUNT(*) as evaluation_count,
-                AVG(combined_score) as avg_score,
-                STDDEV(combined_score) as std_score
-            FROM cold_start_evaluations
-            WHERE evaluation_timestamp >= NOW() - INTERVAL '%s days'
-        """ % days
-        
-        if model:
-            query += " AND embedding_model = $1"
-            results = await self.db.fetch(query, model)
-        else:
-            results = await self.db.fetch(query)
-        
-        time_series = []
-        for row in results:
-            time_series.append({
-                'date': row['eval_date'].isoformat(),
-                'evaluation_count': row['evaluation_count'],
-                'avg_score': float(row['avg_score']) if row['avg_score'] else 0.0,
-                'std_score': float(row['std_score']) if row['std_score'] else 0.0
-            })
-        
-        logger.debug(
-            "Time series data retrieved",
-            data_points=len(time_series)
-        )
-        
-        return time_series
-    
-    async def get_top_performing_users(
-        self,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Get users with highest evaluation scores.
-        
-        Args:
-            limit: Number of users to return
-            
-        Returns:
-            List of top-performing users
-        """
-        query = """
-            SELECT 
-                e.user_id,
-                u.email,
-                p.research_stage,
-                p.primary_domain,
-                e.combined_score,
-                e.profile_alignment,
-                e.ground_truth_quality,
-                e.embedding_model
-            FROM cold_start_evaluations e
-            JOIN users u ON e.user_id = u.user_id
-            JOIN user_profiles_extended p ON e.user_id = p.user_id
-            ORDER BY e.combined_score DESC
-            LIMIT $1
-        """
-        
-        results = await self.db.fetch(query, limit)
-        
-        top_users = []
-        for row in results:
-            top_users.append({
-                'user_id': row['user_id'],
-                'email': row['email'],
-                'research_stage': row['research_stage'],
-                'primary_domain': row['primary_domain'],
-                'combined_score': float(row['combined_score']),
-                'profile_alignment': float(row['profile_alignment']),
-                'ground_truth_quality': float(row['ground_truth_quality']),
-                'model': row['embedding_model']
-            })
-        
-        logger.debug(
-            "Top performing users retrieved",
-            count=len(top_users)
-        )
-        
-        return top_users
-    
-    async def get_bottom_performing_users(
-        self,
-        limit: int = 10
-    ) -> List[Dict[str, Any]]:
-        """
-        Get users with lowest evaluation scores (need improvement).
-        
-        Args:
-            limit: Number of users to return
-            
-        Returns:
-            List of bottom-performing users
-        """
-        query = """
-            SELECT 
-                e.user_id,
-                u.email,
-                p.research_stage,
-                p.primary_domain,
-                p.reading_level,
-                e.combined_score,
-                e.profile_alignment,
-                e.ground_truth_quality
-            FROM cold_start_evaluations e
-            JOIN users u ON e.user_id = u.user_id
-            JOIN user_profiles_extended p ON e.user_id = p.user_id
-            ORDER BY e.combined_score ASC
-            LIMIT $1
-        """
-        
-        results = await self.db.fetch(query, limit)
-        
-        bottom_users = []
-        for row in results:
-            bottom_users.append({
-                'user_id': row['user_id'],
-                'email': row['email'],
-                'research_stage': row['research_stage'],
-                'primary_domain': row['primary_domain'],
-                'reading_level': row['reading_level'],
-                'combined_score': float(row['combined_score']),
-                'profile_alignment': float(row['profile_alignment']),
-                'ground_truth_quality': float(row['ground_truth_quality'])
-            })
-        
-        logger.debug(
-            "Bottom performing users retrieved",
-            count=len(bottom_users)
-        )
-        
-        return bottom_users
-    
-    async def delete_evaluations_for_user(
-        self,
-        user_id: int
-    ) -> int:
-        """
-        Delete all evaluations for a user (for re-testing).
-        
-        Args:
-            user_id: User identifier
-            
-        Returns:
-            Number of deleted records
-        """
-        logger.info(
-            "Deleting evaluations for user",
-            user_id=user_id
-        )
-        
-        query = """
-            DELETE FROM cold_start_evaluations
-            WHERE user_id = $1
-        """
-        
+
+    async def delete_evaluations_for_user(self, user_id: int) -> int:
+        """Delete all evaluations for a user."""
+        query = "DELETE FROM cold_start_evaluations WHERE user_id = $1"
         result = await self.db.execute(query, user_id)
-        
-        # Extract count from result string "DELETE N"
-        count = int(result.split()[-1]) if result else 0
-        
-        logger.info(
-            "Evaluations deleted",
-            user_id=user_id,
-            count=count
-        )
-        
-        return count
+        # Result string is typically "DELETE N"
+        return int(result.split()[-1]) if result else 0

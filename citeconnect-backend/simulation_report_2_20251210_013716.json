@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251210-013645",
+  "user_id": 2,
+  "timestamp": "2025-12-10T01:37:16.560337",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "db6ad6ded1cfa26fdc7437f27fb823ec533e96fe",
+      "title": "Deep Learning: A Comprehensive Overview on Techniques, Taxonomy, Applications and Research Directions",
+      "relevance_score": 0.681
+    },
+    {
+      "paper_id": "44e1dd74f0446ec91221189ad3a65edb1a0208fe",
+      "title": "A guide to deep learning in healthcare",
+      "relevance_score": 0.673
+    },
+    {
+      "paper_id": "dc0c84b7c5e6521216da789f8171544709120cf0",
+      "title": "Opportunities and obstacles for deep learning in biology and medicine",
+      "relevance_score": 0.645
+    },
+    {
+      "paper_id": "4b5eb40e45110dffac9ad7be68a294ecedaec1d4",
+      "title": "A Roadmap for Foundational Research on Artificial Intelligence in Medical Imaging: From the 2018 NIH/RSNA/ACR/The Academy Workshop.",
+      "relevance_score": 0.643
+    },
+    {
+      "paper_id": "b8e1914c78c0b616e7d081759b1343cbfead42ad",
+      "title": "CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Rays with Deep Learning",
+      "relevance_score": 0.637
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "a20c39f5439b84b57d883a21b698394d2347800d",
+      "title": "Engineering and clinical use of artificial intelligence (AI) with machine learning and data science advancements: radiology leading the way for future",
+      "relevance_score": 0.439
+    },
+    {
+      "paper_id": "8470d8070b022c791639ef995b455621cf005379",
+      "title": "Artificial intelligence and machine learning for medical imaging: A technology review.",
+      "relevance_score": 0.431
+    },
+    {
+      "paper_id": "96baf66b1ead911d18b64ad674c9512e189c290b",
+      "title": "Machine Learning and Deep Learning in Medical Imaging: Intelligent Imaging.",
+      "relevance_score": 0.412
+    },
+    {
+      "paper_id": "3893783a815a5d46a26f154683115d4195b1b004",
+      "title": "Preparing Medical Imaging Data for Machine Learning.",
+      "relevance_score": 0.395
+    },
+    {
+      "paper_id": "4043785dacd1c04ed93ec1c08ecf779f4e1717fc",
+      "title": "A Review of Deep Learning in Medical Imaging: Imaging Traits, Technology Trends, Case Studies With Progress Highlights, and Future Promises",
+      "relevance_score": 0.391
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "db6ad6ded1cfa26fdc7437f27fb823ec533e96fe",
+      "paper_title": "Deep Learning: A Comprehensive Overview on Techniques, Taxon...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-10T01:36:58.780314"
+    },
+    {
+      "number": 2,
+      "paper_id": "44e1dd74f0446ec91221189ad3a65edb1a0208fe",
+      "paper_title": "A guide to deep learning in healthcare...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-10T01:36:59.653041"
+    },
+    {
+      "number": 3,
+      "paper_id": "dc0c84b7c5e6521216da789f8171544709120cf0",
+      "paper_title": "Opportunities and obstacles for deep learning in biology and...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-10T01:37:00.573305"
+    },
+    {
+      "number": 4,
+      "paper_id": "4b5eb40e45110dffac9ad7be68a294ecedaec1d4",
+      "paper_title": "A Roadmap for Foundational Research on Artificial Intelligen...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-10T01:37:01.792615"
+    },
+    {
+      "number": 5,
+      "paper_id": "b8e1914c78c0b616e7d081759b1343cbfead42ad",
+      "paper_title": "CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Ra...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-10T01:37:02.910627"
+    },
+    {
+      "number": 6,
+      "paper_id": "addae423490bbe82da4fb2fc265237178686b4e8",
+      "paper_title": "Clinical-grade computational pathology using weakly supervis...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-10T01:37:04.014514"
+    },
+    {
+      "number": 7,
+      "paper_id": "6ac88a018062fa368e15494e915ec1b597b3526c",
+      "paper_title": "Challenges and opportunities beyond structured data in analy...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-10T01:37:05.203346"
+    },
+    {
+      "number": 8,
+      "paper_id": "133d53d09d7b8d298743879bc68ba1af95c67939",
+      "paper_title": "Integrating Artificial Intelligence for Drug Discovery in th...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-10T01:37:06.146228"
+    },
+    {
+      "number": 9,
+      "paper_id": "3a191f45f6c0e8ecc598dc349022b253a652b7f2",
+      "paper_title": "Machine Learning in Drug Discovery: A Review...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-10T01:37:08.962934"
+    },
+    {
+      "number": 10,
+      "paper_id": "d2bf5811dedd4393a3f2340ee0995e638ee27805",
+      "paper_title": "Revolutionizing Medicinal Chemistry: The Application of Arti...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-10T01:37:09.989370"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 2,
+        "username": "tuser1@example.com",
+        "interaction_count": 0,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-12-09T23:17:56.981305",
+        "primary_domain": "healthcare",
+        "interests": [
+          "diagnostics",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 2,
+        "username": "tuser1@example.com",
+        "interaction_count": 10,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-10T06:37:08.395064",
+        "primary_domain": "healthcare",
+        "interests": [
+          "diagnostics",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    }
+  ]
+}
