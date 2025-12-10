@@ -30,15 +30,34 @@ python scripts/bias_slicing_cold_start.py
 if [ -f "bias_report_cold_start_before.json" ]; then
   echo "✅ User bias report generated"
   
-  # Extract max disparity (simulating CI)
-  MAX_DISPARITY=$(python -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); findings=data.get("bias_findings",[]); print(f"{max([f["disparity"] for f in findings]):.4f}" if findings else "0.0000")' 2>/dev/null || echo "0.0000")
+  # Extract max disparity using heredoc (matches CI exactly)
+  MAX_DISPARITY=$(python3 << 'PYSCRIPT'
+import json
+with open("bias_report_cold_start_before.json") as f:
+    data = json.load(f)
+findings = data.get("bias_findings", [])
+if findings:
+    print(f"{max(f['disparity'] for f in findings):.4f}")
+else:
+    print("0.0000")
+PYSCRIPT
+)
   
   # Extract bias count
-  BIAS_COUNT=$(python -c 'import json; data=json.load(open("bias_report_cold_start_before.json")); print(len(data.get("bias_findings",[])))' 2>/dev/null || echo "0")
+  BIAS_COUNT=$(python3 << 'PYSCRIPT'
+import json
+with open("bias_report_cold_start_before.json") as f:
+    data = json.load(f)
+print(len(data.get("bias_findings", [])))
+PYSCRIPT
+)
+  
+  # Calculate percentage
+  MAX_DISPARITY_PCT=$(python3 -c "print(f'{float($MAX_DISPARITY) * 100:.1f}%')" 2>/dev/null || echo "N/A")
   
   echo ""
   echo "📊 Results:"
-  echo "   - Max Disparity: $MAX_DISPARITY"
+  echo "   - Max Disparity: $MAX_DISPARITY ($MAX_DISPARITY_PCT)"
   echo "   - Bias Findings: $BIAS_COUNT"
 else
   echo "⚠️ Bias report not generated (possibly no data in DB)"
