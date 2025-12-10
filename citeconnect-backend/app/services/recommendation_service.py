@@ -1737,6 +1737,8 @@ class RecommendationService:
         Returns:
             Normalized score (0.0-1.0)
         """
+        if year is None: return 0.5
+
         if not citation_count or citation_count == 0 or not max_citations:
             return 0.0
         
