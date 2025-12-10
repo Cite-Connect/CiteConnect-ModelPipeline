@@ -754,16 +754,10 @@ async def metrics_endpoint():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-<<<<<<< HEAD
-    port = int(os.getenv("DEPLOYMENT_PORT", 8000))
-=======
-
->>>>>>> de7e155 (Add monitoring, bias & drift metrics, and dashboard artifacts)
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
         port=8000,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
-    )
-```
+)
