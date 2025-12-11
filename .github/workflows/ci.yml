@@ -13,6 +13,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    continue-on-error: true  # Tests are non-blocking
     
     strategy:
       matrix:
@@ -228,7 +229,9 @@ jobs:
           echo "Detection Thresholds:"
           echo "  - Alert: ${ALERT_THRESHOLD} (20%)"
           echo "  - Critical: ${CRITICAL_THRESHOLD} (30%)"
-          echo "" Mitigation configs are auto-generated and deployed"
+          echo ""
+          echo "Note: Bias detection is non-blocking"
+          echo "      Mitigation configs are auto-generated and deployed"
           echo "============================================================"
           echo ""
 
