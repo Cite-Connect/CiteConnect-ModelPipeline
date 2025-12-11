@@ -78,4 +78,8 @@ temp/
 *.tmp/
 
 #ML flow
-citeconnect-backend/mlruns/
+*mlruns/
+
+#Supabase edge function webhook
+*supabase/
+
