@@ -266,7 +266,7 @@ class RecommendationService:
         diverse_papers = await self._apply_diversity_filtering(scored_papers=scored_papers, target_count=21)
         final_recommendations = diverse_papers[:count]
         enriched = self._enrich_recommendations(papers=final_recommendations, user_interests=[i['interest_term'] for i in interests])
-        fairness_reranked = self._apply_fairness_reranking(enriched)
+        fairness_reranked = await self._apply_fairness_reranking(enriched)
         
         return {
             'user_id': user_id, 'papers': fairness_reranked, 'method': 'cold_start',
@@ -414,7 +414,7 @@ class RecommendationService:
             user_interests=None
         )
         
-        fairness_reranked = self._apply_fairness_reranking(enriched)
+        fairness_reranked = await self._apply_fairness_reranking(enriched)
         
         return {
             'user_id': user_id,
@@ -661,7 +661,7 @@ class RecommendationService:
             paper['final_score'] = base_score * (1.0 + multi_source_boost)
             
             # Store breakdown for explainability
-            paper['score_breakdown'] = {
+            paper[' '] = {
                 'keyword': keyword_score,
                 'semantic': semantic_score,
                 'profile': profile_score,
@@ -704,7 +704,7 @@ class RecommendationService:
         )
         
         # Apply field-based fairness reranking (paper-level fairness)
-        fairness_reranked = self._apply_fairness_reranking(enriched)
+        fairness_reranked = await self._apply_fairness_reranking(enriched)
         
         logger.info(
             "Search-augmented recommendations generated",

@@ -15,10 +15,10 @@ def test_search_augmented():
     print("=" * 70)
     
     payload = {
-        "user_id": 107,
+        "user_id": 42,
         "count": 10,
         "model_preference": "minilm",
-        "search_query": "algorithmic trading",
+        "search_query": "portfolio optimization",
         "session_id": "test-search-001"
     }
     
