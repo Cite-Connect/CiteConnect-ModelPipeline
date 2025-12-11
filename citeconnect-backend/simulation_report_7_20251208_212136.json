@@ -1,0 +1,179 @@
+{
+  "simulation_id": "simulation-20251208-211823",
+  "user_id": 7,
+  "timestamp": "2025-12-08T21:21:36.184822",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "44e1dd74f0446ec91221189ad3a65edb1a0208fe",
+      "title": "A guide to deep learning in healthcare",
+      "relevance_score": 0.661
+    },
+    {
+      "paper_id": "d48271f9fcf300b1243d8848c037ee1c65fc743c",
+      "title": "Development and Validation of a Deep Learning\u2013Based Automated Detection Algorithm for Major Thoracic Diseases on Chest Radiographs",
+      "relevance_score": 0.64
+    },
+    {
+      "paper_id": "28bab81994b60eadc04033885d1023a9116f8e95",
+      "title": "Deep Learning at Chest Radiography: Automated Classification of Pulmonary Tuberculosis by Using Convolutional Neural Networks.",
+      "relevance_score": 0.637
+    },
+    {
+      "paper_id": "addae423490bbe82da4fb2fc265237178686b4e8",
+      "title": "Clinical-grade computational pathology using weakly supervised deep learning on whole slide images",
+      "relevance_score": 0.636
+    },
+    {
+      "paper_id": "3f217e5faf34498df5f90ceb081652c2d934cb0b",
+      "title": "A review of the application of deep learning in medical image classification and segmentation",
+      "relevance_score": 0.632
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "17f509eb182118cac5f285527f5b1009026a79fb",
+      "title": "Overview of Machine Learning: Part 2: Deep Learning for Medical Image Analysis.",
+      "relevance_score": 0.377
+    },
+    {
+      "paper_id": "cd7a8d3d320fdc765b60bde97ed980349ba4ad14",
+      "title": "Predicting Patient Demographics From Chest Radiographs With Deep Learning.",
+      "relevance_score": 0.376
+    },
+    {
+      "paper_id": "460692744430380068cf59ee64adb8b645aee025",
+      "title": "Research Progress of Deep Learning in the Diagnosis and Prevention of Stroke",
+      "relevance_score": 0.372
+    },
+    {
+      "paper_id": "b6541522be6ab0d65f0ffe6cde46ad727c633e99",
+      "title": "CAD and AI for breast cancer - Recent Development and Challenges.",
+      "relevance_score": 0.367
+    },
+    {
+      "paper_id": "710cf2afc9dfb497e70a0d826befb7ac654c7775",
+      "title": "Deep learning-enabled system for rapid pneumothorax screening on chest CT.",
+      "relevance_score": 0.359
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "44e1dd74f0446ec91221189ad3a65edb1a0208fe",
+      "paper_title": "A guide to deep learning in healthcare...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:20:58.302384"
+    },
+    {
+      "number": 2,
+      "paper_id": "d48271f9fcf300b1243d8848c037ee1c65fc743c",
+      "paper_title": "Development and Validation of a Deep Learning\u2013Based Automate...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:20:59.372542"
+    },
+    {
+      "number": 3,
+      "paper_id": "28bab81994b60eadc04033885d1023a9116f8e95",
+      "paper_title": "Deep Learning at Chest Radiography: Automated Classification...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-08T21:21:00.426249"
+    },
+    {
+      "number": 4,
+      "paper_id": "addae423490bbe82da4fb2fc265237178686b4e8",
+      "paper_title": "Clinical-grade computational pathology using weakly supervis...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:21:01.607569"
+    },
+    {
+      "number": 5,
+      "paper_id": "3f217e5faf34498df5f90ceb081652c2d934cb0b",
+      "paper_title": "A review of the application of deep learning in medical imag...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:21:03.206397"
+    },
+    {
+      "number": 6,
+      "paper_id": "b8e1914c78c0b616e7d081759b1343cbfead42ad",
+      "paper_title": "CheXNet: Radiologist-Level Pneumonia Detection on Chest X-Ra...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:21:04.340985"
+    },
+    {
+      "number": 7,
+      "paper_id": "db6ad6ded1cfa26fdc7437f27fb823ec533e96fe",
+      "paper_title": "Deep Learning: A Comprehensive Overview on Techniques, Taxon...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-08T21:21:05.660624"
+    },
+    {
+      "number": 8,
+      "paper_id": "a8a929124b5eeb4f191fa89384766861b33b4e43",
+      "paper_title": "Variability and reproducibility in deep learning for medical...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-08T21:21:07.366451"
+    },
+    {
+      "number": 9,
+      "paper_id": "0ae5b99f09b7ebacc4aeaed7644aff90534a3aaa",
+      "paper_title": "Deep Learning for Medical Image Analysis...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-08T21:21:09.460620"
+    },
+    {
+      "number": 10,
+      "paper_id": "d43c4fcb5469c495ad74861dcc65246b00204904",
+      "paper_title": "COVID-19 Screening on Chest X-ray Images Using Deep Learning...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-08T21:21:11.129575"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 0,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-11-29T21:28:36.414796",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 7,
+        "username": "healthcare1.phd@test.com",
+        "interaction_count": 10,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-12-09T02:21:11.708116",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "deep learning",
+          "machine learning",
+          "medical imaging"
+        ]
+      }
+    }
+  ]
+}

@@ -189,7 +189,26 @@ class RecommendationOrchestrator:
                 "recommendations": [],
                 "metadata": {"error": "Generation failed"}
             }
+        # ────────────────────────────────────────────────────────
+        # SANITIZATION: Cap Scores at 1.0 (Fix for ResponseValidationError)
+        # ────────────────────────────────────────────────────────
+        if recommendations:
+            for paper in recommendations:
+                # Check known score keys and clamp to max 1.0
+                # 'relevance_score' is the key seen in validation errors
+                for key in ['relevance_score', 'final_score', 'score']:
+                    if key in paper and isinstance(paper[key], (int, float)):
+                        original_val = paper[key]
+                        if original_val > 1.0:
+                            paper[key] = 1.0
+                            # Optional: could log debug here if needed
 
+        if not recommendations:
+            logger.error(f"Failed to generate recommendations for user {user_id}")
+            return {
+                "recommendations": [],
+                "metadata": {"error": "Generation failed"}
+            }
         # ────────────────────────────────────────────────────────
         # EVALUATION
         # ────────────────────────────────────────────────────────
@@ -200,13 +219,13 @@ class RecommendationOrchestrator:
                     user_id=user_id,
                     recommendations=recommendations,
                     model=model_name,
-                    store_result=False 
+                    store_result=True 
                 )
             else:
                 eval_report = await self.eval_service.evaluate_warm_start_recommendations(
                     user_id=user_id,
                     recommendations=recommendations,
-                    store_result=False
+                    store_result=True
                 )
                 
             score = eval_report.get('combined_score') or eval_report.get('precision_at_10', 0)

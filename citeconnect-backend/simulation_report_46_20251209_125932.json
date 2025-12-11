@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251209-125904",
+  "user_id": 46,
+  "timestamp": "2025-12-09T12:59:32.451136",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "aa0d056edd56a33feff1b907e7c95b14aa7c26f2",
+      "title": "Shadows of quantum machine learning",
+      "relevance_score": 0.446
+    },
+    {
+      "paper_id": "bb65bde93702d5a79a69eadbefb2a2cf6fd468cb",
+      "title": "Design and analysis of quantum machine learning: a survey",
+      "relevance_score": 0.446
+    },
+    {
+      "paper_id": "bbbd9196a1ba300dae41116a392fe710fd5c6779",
+      "title": "Review of some existing QML frameworks and novel hybrid classical\u2013quantum neural networks realising binary classification for the noisy datasets",
+      "relevance_score": 0.446
+    },
+    {
+      "paper_id": "1923fe26a65930b85455f83f7a20e48a8e1a78fc",
+      "title": "Quantum Machine Learning in Healthcare: Developments and Challenges",
+      "relevance_score": 0.446
+    },
+    {
+      "paper_id": "813c88ec5a7500cf6900add70da7acdc03e72216",
+      "title": "Programming Quantum Neural Networks on NISQ Systems: An Overview of Technologies and Methodologies",
+      "relevance_score": 0.445
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "baf57a351f78f5bb4706166f6167c6335982451c",
+      "title": "Classification of the Fashion-MNIST Dataset on a Quantum Computer",
+      "relevance_score": 0.446
+    },
+    {
+      "paper_id": "52e8537ebd00f7be32546039827f09af359dba39",
+      "title": "Quantum machine learning of large datasets using randomized measurements",
+      "relevance_score": 0.445
+    },
+    {
+      "paper_id": "cfe6f6347112bbdef6e0006e23ea3f185467a8bb",
+      "title": "QNet: A Scalable and Noise-Resilient Quantum Neural Network Architecture for Noisy Intermediate-Scale Quantum Computers",
+      "relevance_score": 0.444
+    },
+    {
+      "paper_id": "4b01e7cadd25d7c8763d9bec63c390e241f18cf8",
+      "title": "The Dilemma of Quantum Neural Networks",
+      "relevance_score": 0.444
+    },
+    {
+      "paper_id": "73083eebd62b3b56a3ee007174b25aacabb317f8",
+      "title": "Entangled Datasets for Quantum Machine Learning",
+      "relevance_score": 0.443
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "aa0d056edd56a33feff1b907e7c95b14aa7c26f2",
+      "paper_title": "Shadows of quantum machine learning...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:59:12.113198"
+    },
+    {
+      "number": 2,
+      "paper_id": "bb65bde93702d5a79a69eadbefb2a2cf6fd468cb",
+      "paper_title": "Design and analysis of quantum machine learning: a survey...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:59:13.175440"
+    },
+    {
+      "number": 3,
+      "paper_id": "bbbd9196a1ba300dae41116a392fe710fd5c6779",
+      "paper_title": "Review of some existing QML frameworks and novel hybrid clas...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:59:14.184038"
+    },
+    {
+      "number": 4,
+      "paper_id": "1923fe26a65930b85455f83f7a20e48a8e1a78fc",
+      "paper_title": "Quantum Machine Learning in Healthcare: Developments and Cha...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:59:15.322971"
+    },
+    {
+      "number": 5,
+      "paper_id": "813c88ec5a7500cf6900add70da7acdc03e72216",
+      "paper_title": "Programming Quantum Neural Networks on NISQ Systems: An Over...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:59:16.482584"
+    },
+    {
+      "number": 6,
+      "paper_id": "3463814d76e837408421cf11651ca529e1cfb3e3",
+      "paper_title": "Better than classical? The subtle art of benchmarking quantu...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:59:17.664813"
+    },
+    {
+      "number": 7,
+      "paper_id": "d32c758d23b015cda9ddb77ca912e84818c5f35b",
+      "paper_title": "Is Quantum Advantage the Right Goal for Quantum Machine Lear...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:59:18.862173"
+    },
+    {
+      "number": 8,
+      "paper_id": "c82d82722c3ae00454e13d020c501b6dd95d6016",
+      "paper_title": "Pulse-efficient quantum machine learning...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:59:20.064021"
+    },
+    {
+      "number": 9,
+      "paper_id": "a2c4a365be42cf5a096d88ddccb9cbcab8909739",
+      "paper_title": "Quantum machine learning beyond kernel methods...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:59:21.288694"
+    },
+    {
+      "number": 10,
+      "paper_id": "32c709cf5d6ba1b5a729b4871c3129bb1bf578bf",
+      "paper_title": "Quantum machine learning in high energy physics...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T12:59:22.369266"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 46,
+        "username": "synthetic_quantum_computing_undergraduate_32@seed.local",
+        "interaction_count": 31,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T17:56:19.718574",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "quantum algorithms",
+          "quantum hardware",
+          "quantum simulation"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 46,
+        "username": "synthetic_quantum_computing_undergraduate_32@seed.local",
+        "interaction_count": 41,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T17:59:18.638973",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "quantum algorithms",
+          "quantum hardware",
+          "quantum simulation"
+        ]
+      }
+    }
+  ]
+}

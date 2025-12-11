@@ -9,7 +9,7 @@ import uuid # Added to generate session IDs
 # Configuration
 BASE_URL = "http://localhost:8000" 
 API_PREFIX = "/api/v1/recommendations" 
-USER_ID = 7
+USER_ID = 2
 
 def print_section(title):
     print(f"\n{'='*60}")
@@ -19,7 +19,7 @@ def print_section(title):
 def test_generate_recommendations():
     print_section("Generate Recommendations (POST /)")
     
-    url = f"{BASE_URL}{API_PREFIX}"
+    url = f"{BASE_URL}{API_PREFIX}/test"
     payload = {
         "user_id": USER_ID,
         "count": 5,

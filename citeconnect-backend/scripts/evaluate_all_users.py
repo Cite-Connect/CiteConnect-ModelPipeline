@@ -99,7 +99,7 @@ async def evaluate_all_cold_start_users(
             ) VALUES ($1, $2, $3, $4, $5, $6, $7, NOW(), $8, $9)
         """,
         internal_run_id,
-        'all-MiniLM-L6-v2' if model == 'minilm' else 'specter2',
+        'all-MiniLM-L6-v2' if model == 'minilm' else 'specter',
         384 if model == 'minilm' else 768,
         json.dumps(current_weights),
         'baseline', 'cold_start', 'running',

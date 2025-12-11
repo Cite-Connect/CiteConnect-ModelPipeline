@@ -712,7 +712,7 @@ async def debug_embedding_service():
 # -----------------------------------------------------------------------------
 # Routers
 # -----------------------------------------------------------------------------
-from app.api.v1 import graph, recommendations, users, papers, interactions
+from app.api.v1 import graph, recommendations, users, papers, interactions, pubsub
 
 app.include_router(
     graph.router, prefix=f"{settings.API_V1_PREFIX}/graph", tags=["graph"]
@@ -733,6 +733,8 @@ app.include_router(
     prefix=f"{settings.API_V1_PREFIX}/interactions",
     tags=["interactions"],
 )
+
+app.include_router(pubsub.router, prefix="/pubsub")
 
 
 # -----------------------------------------------------------------------------

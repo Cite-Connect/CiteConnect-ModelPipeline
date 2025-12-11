@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251209-125109",
+  "user_id": 46,
+  "timestamp": "2025-12-09T12:51:46.482440",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "4b78bbee1d9473849b74548327e29c0890612d33",
+      "title": "Dynamical simulation via quantum machine learning with provable generalization",
+      "relevance_score": 0.394
+    },
+    {
+      "paper_id": "05991d4abb15022d4f5e179c8ed42622eeac8472",
+      "title": "Quantum Machine Learning Implementations: Proposals and Experiments",
+      "relevance_score": 0.389
+    },
+    {
+      "paper_id": "74d5ad7edbc7eb259fa5f96a48a8ffa195619c18",
+      "title": "Qsun: an open-source platform towards practical quantum machine learning applications",
+      "relevance_score": 0.385
+    },
+    {
+      "paper_id": "d5f843723f1e94009e04b8643a73b79503b6caf8",
+      "title": "Systematic Literature Review: Quantum Machine Learning and its applications",
+      "relevance_score": 0.385
+    },
+    {
+      "paper_id": "34c0ac4943b282e023718c81df8165bf94ed5a2c",
+      "title": "An Introduction to Quantum Machine Learning for Engineers",
+      "relevance_score": 0.384
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "8ae983d8dfc414c2453ab657de8aa10b399c889a",
+      "title": "Quantum Machine Learning and Recent Advancements",
+      "relevance_score": 0.467
+    },
+    {
+      "paper_id": "cff30a5d024c13bbc9a503729b69db801c034c55",
+      "title": "Quantum Machine Learning: A Review and Case Studies",
+      "relevance_score": 0.461
+    },
+    {
+      "paper_id": "ab06951251e0abfdb866694f9a23a79c72784317",
+      "title": "Challenges and opportunities in quantum machine learning",
+      "relevance_score": 0.46
+    },
+    {
+      "paper_id": "5f4e436545dc8598676cd65ff3cf0c964101f113",
+      "title": "A Comprehensive Survey on Quantum Machine Learning and Possible Applications",
+      "relevance_score": 0.455
+    },
+    {
+      "paper_id": "bf9d8b79ed3ee4e1217afec0676d4fe538e5d1b8",
+      "title": "Quantum Machine Learning: A Review and Current Status",
+      "relevance_score": 0.455
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "4b78bbee1d9473849b74548327e29c0890612d33",
+      "paper_title": "Dynamical simulation via quantum machine learning with prova...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:51:23.359024"
+    },
+    {
+      "number": 2,
+      "paper_id": "05991d4abb15022d4f5e179c8ed42622eeac8472",
+      "paper_title": "Quantum Machine Learning Implementations: Proposals and Expe...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:51:24.747780"
+    },
+    {
+      "number": 3,
+      "paper_id": "74d5ad7edbc7eb259fa5f96a48a8ffa195619c18",
+      "paper_title": "Qsun: an open-source platform towards practical quantum mach...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:51:25.816311"
+    },
+    {
+      "number": 4,
+      "paper_id": "d5f843723f1e94009e04b8643a73b79503b6caf8",
+      "paper_title": "Systematic Literature Review: Quantum Machine Learning and i...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:51:27.013939"
+    },
+    {
+      "number": 5,
+      "paper_id": "34c0ac4943b282e023718c81df8165bf94ed5a2c",
+      "paper_title": "An Introduction to Quantum Machine Learning for Engineers...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:51:28.184426"
+    },
+    {
+      "number": 6,
+      "paper_id": "ec7f5dc077480df149bcd4358a3aa8441878ca59",
+      "paper_title": "Quantum computing models for artificial neural networks...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:51:29.383412"
+    },
+    {
+      "number": 7,
+      "paper_id": "bc7e1813dfbe3a7079d678bff6ee6a1efba3a618",
+      "paper_title": "A Survey on Machine Learning Techniques Using Quantum Comput...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:51:30.604432"
+    },
+    {
+      "number": 8,
+      "paper_id": "adfb4ed7f9a3eea96fa4b36ec581c41edc9a37c1",
+      "paper_title": "Quantum state tomography using quantum machine learning...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:51:32.046790"
+    },
+    {
+      "number": 9,
+      "paper_id": "7c07040861355cb5ff1a336dbfd3711477e2f5c0",
+      "paper_title": "Quantum Machine Learning Applications in the Biomedical Doma...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:51:33.198681"
+    },
+    {
+      "number": 10,
+      "paper_id": "2f181fae61d469e651a8cc14eaa3ca639a62359a",
+      "paper_title": "Application-Oriented Benchmarking of Quantum Generative Lear...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T12:51:34.231263"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 46,
+        "username": "synthetic_quantum_computing_undergraduate_32@seed.local",
+        "interaction_count": 11,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T17:41:17.914953",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "quantum algorithms",
+          "quantum hardware",
+          "quantum simulation"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 46,
+        "username": "synthetic_quantum_computing_undergraduate_32@seed.local",
+        "interaction_count": 21,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T17:51:31.832327",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "quantum algorithms",
+          "quantum hardware",
+          "quantum simulation"
+        ]
+      }
+    }
+  ]
+}

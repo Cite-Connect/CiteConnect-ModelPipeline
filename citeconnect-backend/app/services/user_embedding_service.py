@@ -258,28 +258,67 @@ class UserEmbeddingService:
             paper_count=len(paper_ids)
         )
         
-        # Get paper embeddings
-        minilm_embeddings = await self.paper_repo._get_paper_embeddings(paper_ids, 'minilm')
-        specter_embeddings = await self.paper_repo._get_paper_embeddings(paper_ids, 'specter')
+        # Get paper embeddings (returns Dict[paper_id, np.ndarray])
+        minilm_embeddings_dict = await self.paper_repo._get_paper_embeddings(paper_ids, 'minilm')
+        specter_embeddings_dict = await self.paper_repo._get_paper_embeddings(paper_ids, 'specter')
         
-        if not minilm_embeddings or not specter_embeddings:
+        if not minilm_embeddings_dict or not specter_embeddings_dict:
             logger.warning(
                 "Could not retrieve paper embeddings, falling back to profile",
                 user_id=user_id
             )
             return await self._generate_from_profile(user_id)
         
-        # Calculate weighted average based on interaction strength
-        weights = [i['interaction_strength'] for i in interactions]
+        # ✅ FIX: Build aligned arrays from dictionaries
+        # Only include papers that have embeddings in BOTH models
+        minilm_embeddings_list = []
+        specter_embeddings_list = []
+        valid_weights = []
         
+        for interaction in interactions:
+            paper_id = interaction['paper_id']
+            
+            # Check if this paper has embeddings in both models
+            if paper_id in minilm_embeddings_dict and paper_id in specter_embeddings_dict:
+                minilm_embeddings_list.append(minilm_embeddings_dict[paper_id])
+                specter_embeddings_list.append(specter_embeddings_dict[paper_id])
+                valid_weights.append(float(interaction['interaction_strength']))
+        
+        # Check if we have any valid embeddings
+        if not minilm_embeddings_list:
+            logger.warning(
+                "No valid embeddings found for interacted papers, falling back to profile",
+                user_id=user_id,
+                total_interactions=len(interactions),
+                papers_with_embeddings=0
+            )
+            return await self._generate_from_profile(user_id)
+        
+        # Convert to numpy arrays with proper shape
+        minilm_embeddings = np.array(minilm_embeddings_list, dtype=np.float64)
+        specter_embeddings = np.array(specter_embeddings_list, dtype=np.float64)
+        weights = np.array(valid_weights, dtype=np.float64)  # Shape: (n_papers,)
+        
+        logger.debug(
+            "Embedding arrays prepared",
+            user_id=user_id,
+            papers_used=len(weights),
+            minilm_shape=minilm_embeddings.shape,
+            specter_shape=specter_embeddings.shape,
+            weights_shape=weights.shape
+        )
+        
+        # Calculate weighted average based on interaction strength
         minilm_emb = np.average(minilm_embeddings, axis=0, weights=weights)
         specter_emb = np.average(specter_embeddings, axis=0, weights=weights)
         
-        logger.debug(
+        logger.info(
             "Embeddings averaged from interactions",
             user_id=user_id,
-            papers_used=len(paper_ids),
-            avg_weight=np.mean(weights)
+            papers_used=len(weights),
+            avg_weight=float(np.mean(weights)),
+            minilm_dim=len(minilm_emb),
+            specter_dim=len(specter_emb)
         )
         
         return minilm_emb, specter_emb
