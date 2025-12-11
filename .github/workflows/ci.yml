@@ -107,6 +107,7 @@ jobs:
   bias-detection:
     runs-on: ubuntu-latest
     needs: test
+    if: always()  # Run bias detection even if tests fail
     # DEPLOYMENT BLOCKING: Set to false to block deployment on critical bias
     continue-on-error: false
 
