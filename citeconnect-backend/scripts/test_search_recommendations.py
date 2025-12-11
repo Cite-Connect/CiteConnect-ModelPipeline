@@ -15,7 +15,7 @@ def test_search_augmented():
     print("=" * 70)
     
     payload = {
-        "user_id": 42,
+        "user_id": 107,
         "count": 10,
         "model_preference": "minilm",
         "search_query": "portfolio optimization",
