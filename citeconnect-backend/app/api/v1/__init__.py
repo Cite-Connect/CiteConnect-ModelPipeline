@@ -35,3 +35,4 @@ router.include_router(
     prefix="/interactions",
     tags=["interactions"]
 )
+

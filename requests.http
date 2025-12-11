@@ -2,7 +2,7 @@
 
 ### Variables
 @baseUrl = http://localhost:8000/api/v1
-@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3MSwiZW1haWwiOiJzbW9oYW50eTE4QGdtYWlsLmNvbSIsImV4cCI6MTc2NTI0NTQ2NH0.dsEwqbYgqlEk1Cb1COIy-ABHjqcGudtnG58szrtKMHU
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjo3MSwiZW1haWwiOiJzbW9oYW50eTE4QGdtYWlsLmNvbSIsImV4cCI6MTc2NTQyNDYxNH0.KpQGsfw1Xbwyxt5Q1ael_pPC7L6MedfsRMG0qkEvk_w
 @prodUrl = https://citeconnect-backend-api-897523647765.us-central1.run.app/api/v1
 
 ### Health Check
@@ -133,26 +133,33 @@ Authorization: Bearer {{token}}
   "user_id": 71,
   "count": 5,
   "model_preference": "specter",
-  "session_id": "test-session-"
+  "session_id": "test-session-alpha-001"
 }
+
+### Track Interaction
+POST {{baseUrl}}/interactions?user_id=71
+Content-Type: application/json
+Authorization: Bearer {{token}}
+
+{"paper_id":"698baad0cc98285b33e204c74e463e3840a64294",
+"interaction_type":"save",
+"context":{"source":"search",
+"session_id":"test-session-alpha-001"}
+}
+
 
 
 
 
 ### Track Interaction
-POST {{baseUrl}}/interactions/1
+GET {{baseUrl}}/interactions/saved?user_id=2
 Content-Type: application/json
 Authorization: Bearer {{token}}
 
-{
-  "paper_id": "paper_id_here",
-  "interaction_type": "save",
-  "context": {
-    "source": "recommendation",
-    "position": 1,
-    "session_id": "test-session-1"
-  }
-}
+
+
+
+
 
 
 ### 1. Get Full Citation Network (Depth 1, 50 nodes)
