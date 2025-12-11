@@ -48,11 +48,18 @@ class TestEvaluationService:
             mock_profile.return_value = 0.75
             with patch.object(evaluation_service, '_calculate_ground_truth_quality', new_callable=AsyncMock) as mock_gt:
                 mock_gt.return_value = 0.65
-                with patch.object(evaluation_service, '_store_cold_start_evaluation', new_callable=AsyncMock):
-                    result = await evaluation_service.evaluate_cold_start_recommendations(
-                        user_id=1,
-                        recommendations=recommendations
-                    )
+                # with patch.object(evaluation_service, '_store_cold_start_evaluation', new_callable=AsyncMock):
+                #     result = await evaluation_service.evaluate_cold_start_recommendations(
+                #         user_id=1,
+                #         recommendations=recommendations
+                #     )
+
+                # Mock the eval_repo.save_cold_start_evaluation method (new API)
+                evaluation_service.eval_repo.save_cold_start_evaluation = AsyncMock()
+                result = await evaluation_service.evaluate_cold_start_recommendations(
+                    user_id=1,
+                    recommendations=recommendations
+                )
         
         assert isinstance(result, dict)
         assert 'profile_alignment' in result
