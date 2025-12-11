@@ -2,14 +2,10 @@
 name: Deploy Dev
 
 on:
-  push:
-    branches: 
-      - main
-      - feature/llm-service-knowledge-base  # Testing branch
   pull_request:
     branches: [ main ]
-    types: [ closed ]
   workflow_dispatch:
+
 
 env:
   PROJECT_ID: strange-calling-476017-r5
