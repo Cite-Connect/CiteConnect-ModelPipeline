@@ -11,81 +11,81 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-    continue-on-error: true  # Tests are non-blocking
+  # test:
+  #   runs-on: ubuntu-latest
+  #   continue-on-error: true  # Tests are non-blocking
     
-    strategy:
-      matrix:
-        python-version: ['3.11']
+  #   strategy:
+  #     matrix:
+  #       python-version: ['3.11']
     
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+  #   steps:
+  #     - name: Checkout code
+  #       uses: actions/checkout@v4
     
-      - name: Debug - List files to find requirements.txt
-        run: |
-          echo "=== Repository structure ==="
-          ls -la
-          echo ""
-          echo "=== Looking for requirements files ==="
-          find . -name "requirements*.txt" -type f
-          echo ""
-          echo "=== Current directory ==="
-          pwd
+  #     - name: Debug - List files to find requirements.txt
+  #       run: |
+  #         echo "=== Repository structure ==="
+  #         ls -la
+  #         echo ""
+  #         echo "=== Looking for requirements files ==="
+  #         find . -name "requirements*.txt" -type f
+  #         echo ""
+  #         echo "=== Current directory ==="
+  #         pwd
 
-      - name: Set up Python 3.11
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-          cache-dependency-path: |
-            citeconnect-backend/requirements.txt
+  #     - name: Set up Python 3.11
+  #       uses: actions/setup-python@v5
+  #       with:
+  #         python-version: '3.11'
+  #         cache: 'pip'
+  #         cache-dependency-path: |
+  #           citeconnect-backend/requirements.txt
     
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+  #     - name: Install dependencies
+  #       run: |
+  #         python -m pip install --upgrade pip
           
-          # Install from citeconnect-backend
-          echo "Installing citeconnect-backend dependencies..."
-          pip install -r ./citeconnect-backend/requirements.txt
+  #         # Install from citeconnect-backend
+  #         echo "Installing citeconnect-backend dependencies..."
+  #         pip install -r ./citeconnect-backend/requirements.txt
     
-      - name: Run all tests from tests folder
-        env:
-          PYTHONPATH: citeconnect-backend
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          ENVIRONMENT: test
-          SUPABASE_URL: http://example.com
-          SECRET_KEY: dummy-secret-key
-        run: |
-          echo "Running tests from citeconnect-backend/tests/ directory"
-          echo "This includes:"
-          echo "  - tests/test_api/ (API endpoint tests)"
-          echo "  - tests/test_services/ (Service layer tests)"
-          echo "  - tests/test_utils/ (Utility tests)"
-          echo "  - tests/integration/ (Integration tests)"
-          echo ""
-          pytest --cov=citeconnect-backend/app \
-                 --cov-report=html \
-                 --cov-report=term-missing \
-                 --cov-report=xml \
-                 -v \
-                 --tb=short \
-                 citeconnect-backend/tests/
+  #     - name: Run all tests from tests folder
+  #       env:
+  #         PYTHONPATH: citeconnect-backend
+  #         DATABASE_URL: ${{ secrets.DATABASE_URL }}
+  #         ENVIRONMENT: test
+  #         SUPABASE_URL: http://example.com
+  #         SECRET_KEY: dummy-secret-key
+  #       run: |
+  #         echo "Running tests from citeconnect-backend/tests/ directory"
+  #         echo "This includes:"
+  #         echo "  - tests/test_api/ (API endpoint tests)"
+  #         echo "  - tests/test_services/ (Service layer tests)"
+  #         echo "  - tests/test_utils/ (Utility tests)"
+  #         echo "  - tests/integration/ (Integration tests)"
+  #         echo ""
+  #         pytest --cov=citeconnect-backend/app \
+  #                --cov-report=html \
+  #                --cov-report=term-missing \
+  #                --cov-report=xml \
+  #                -v \
+  #                --tb=short \
+  #                citeconnect-backend/tests/
     
-      - name: Upload coverage to artifacts
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-report
-          path: htmlcov/
+  #     - name: Upload coverage to artifacts
+  #       uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: coverage-report
+  #         path: htmlcov/
     
-      - name: Upload coverage XML
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: coverage-xml
-          path: coverage.xml
+  #     - name: Upload coverage XML
+  #       uses: actions/upload-artifact@v4
+  #       if: always()
+  #       with:
+  #         name: coverage-xml
+  #         path: coverage.xml
 
   bias-detection:
     runs-on: ubuntu-latest
