@@ -38,6 +38,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:3000", "http://localhost:8000", "https://pulp-three.vercel.app"]
     
     # Database - Supabase PostgreSQL
+    # Webhook and Pub/Sub settings
+    WEBHOOK_SECRET: Optional[str] = None
     SUPABASE_URL: str
     SUPABASE_KEY: Optional[str] = None  # Optional - only needed for Supabase auth/storage
     DATABASE_URL: str  # postgres:// connection string

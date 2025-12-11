@@ -41,7 +41,7 @@ class BaseRepository(ABC, Generic[T]):
     async def find_by_id(
         self,
         id_value: Any,
-        id_column: str = "id"
+        id_column: str = "user_id"
     ) -> Optional[asyncpg.Record]:
         """
         Find record by ID.

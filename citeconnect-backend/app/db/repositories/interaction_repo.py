@@ -1,11 +1,12 @@
 """
 Interaction repository for tracking user-paper interactions.
 Handles interaction history and filters.
-UPDATED: Fixed for Supabase schema with generated interaction_strength and context JSONB.
+UPDATED: Fixed JSONB handling for context field.
 """
 from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 import asyncpg
+import json  # ADDED: For JSONB serialization
 from app.db.repositories.base import BaseRepository
 from app.db.connection import DatabaseConnection
 from app.utils.logger import get_logger
@@ -63,7 +64,7 @@ class InteractionRepository(BaseRepository):
                 user_id, paper_id, interaction_type,
                 duration_seconds, context
             )
-            VALUES ($1, $2, $3, $4, $5)
+            VALUES ($1, $2, $3, $4, $5::jsonb)
             RETURNING *
         """
         

@@ -2,6 +2,7 @@
 Complete interaction tracking endpoint with all table updates.
 Updates: user_interactions, user_recommendation_state (with stage transitions),
 user_saved_papers, user_liked_papers, user_paper_filters, and triggers embedding regeneration.
+UPDATED: Added JWT authentication to all endpoints.
 """
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from typing import Optional
@@ -10,6 +11,7 @@ from app.utils.logger import get_logger
 from app.db.connection import get_db, DatabaseConnection
 from app.db.repositories.interaction_repo import InteractionRepository
 from app.db.repositories.user_repo import UserRepository
+from app.api.v1.auth import get_current_user  # FIXED IMPORT PATH
 from app.services.user_embedding_service import UserEmbeddingService
 
 logger = get_logger(__name__)
@@ -72,6 +74,7 @@ async def track_interaction(
     user_id: int,
     interaction_data: PaperInteractionRequest,
     background_tasks: BackgroundTasks,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     db: DatabaseConnection = Depends(get_db),
     interaction_repo: InteractionRepository = Depends(get_interaction_repo),
     user_repo: UserRepository = Depends(get_user_repo)
@@ -82,6 +85,18 @@ async def track_interaction(
     This is the COMPLETE interaction handler that ensures all tables
     stay synchronized with user behavior.
     """
+    # Verify user is tracking their own interaction
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized interaction tracking attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only track your own interactions"
+        )    
+
     logger.info(
         "Interaction tracking request",
         user_id=user_id,
@@ -224,7 +239,6 @@ async def track_interaction(
             "paper_id": interaction_data.paper_id,
             "interaction_type": interaction_data.interaction_type,
             "strength": float(interaction['interaction_strength']),
-            "embedding_update_triggered": should_update,
             "message": "Interaction tracked successfully"
         }
         
@@ -270,26 +284,32 @@ async def track_interaction(
 @router.get(
     "/{user_id}/history",
     summary="Get user interaction history",
-    description="Retrieve user's past interactions with papers"
+    description="Retrieve user's past interactions with papers. **Requires authentication.**"
 )
 async def get_interaction_history(
     user_id: int,
     limit: Optional[int] = 50,
     min_strength: Optional[float] = None,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     interaction_repo: InteractionRepository = Depends(get_interaction_repo)
 ):
     """
     Get user's interaction history.
-    
-    Args:
-        user_id: User identifier
-        limit: Maximum interactions to return
-        min_strength: Optional minimum interaction strength
-        interaction_repo: Interaction repository
-        
-    Returns:
-        List of user interactions
+    User can only view their own history.
     """
+    
+    # Verify user is accessing their own history
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized history access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own interaction history"
+        )
+    
     logger.info(
         "Interaction history request",
         user_id=user_id,
@@ -332,24 +352,31 @@ async def get_interaction_history(
 @router.get(
     "/{user_id}/statistics",
     summary="Get interaction statistics",
-    description="Get aggregated statistics about user interactions"
+    description="Get aggregated statistics about user interactions. **Requires authentication.**"
 )
 async def get_interaction_statistics(
     user_id: int,
     days: int = 30,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     interaction_repo: InteractionRepository = Depends(get_interaction_repo)
 ):
     """
     Get user interaction statistics.
-    
-    Args:
-        user_id: User identifier
-        days: Look back period in days
-        interaction_repo: Interaction repository
-        
-    Returns:
-        Interaction statistics
+    User can only view their own statistics.
     """
+    
+    # Verify user is accessing their own statistics
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized statistics access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own interaction statistics"
+        )
+    
     logger.info(
         "Interaction statistics request",
         user_id=user_id,
@@ -422,24 +449,32 @@ async def get_interaction_statistics(
 
 
 @router.get(
-    "/{user_id}/saved",
+    "/saved",
     summary="Get saved papers",
-    description="Retrieve papers user has saved"
+    description="Retrieve papers user has saved. **Requires authentication.**"
 )
 async def get_saved_papers(
     user_id: int,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     interaction_repo: InteractionRepository = Depends(get_interaction_repo)
 ):
     """
     Get user's saved papers.
-    
-    Args:
-        user_id: User identifier
-        interaction_repo: Interaction repository
-        
-    Returns:
-        List of saved papers
+    User can only view their own saved papers.
     """
+    
+    # Verify user is accessing their own saved papers
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized saved papers access attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own saved papers"
+        )
+    
     logger.info("Saved papers request", user_id=user_id)
     
     try:
@@ -474,24 +509,31 @@ async def get_saved_papers(
 @router.delete(
     "/{user_id}/filters/{paper_id}",
     summary="Remove paper filter",
-    description="Remove a paper from user's filter list"
+    description="Remove a paper from user's filter list. **Requires authentication.**"
 )
 async def remove_paper_filter(
     user_id: int,
     paper_id: str,
+    current_user: dict = Depends(get_current_user),  # AUTHENTICATION REQUIRED
     db: DatabaseConnection = Depends(get_db)
 ):
     """
     Remove paper filter.
-    
-    Args:
-        user_id: User identifier
-        paper_id: Paper identifier
-        db: Database connection
-        
-    Returns:
-        Confirmation message
+    User can only manage their own filters.
     """
+    
+    # Verify user is managing their own filters
+    if current_user['user_id'] != user_id:
+        logger.warning(
+            "Unauthorized filter removal attempt",
+            requesting_user=current_user['user_id'],
+            target_user=user_id
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only manage your own paper filters"
+        )
+    
     logger.info(
         "Filter removal request",
         user_id=user_id,
