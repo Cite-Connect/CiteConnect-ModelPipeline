@@ -756,11 +756,10 @@ async def metrics_endpoint():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
-    port = int(os.getenv("DEPLOYMENT_PORT", 8000))
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
-        port=port,
+        port=8000,
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )
