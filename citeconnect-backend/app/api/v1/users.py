@@ -16,6 +16,7 @@ from app.db.connection import get_db, DatabaseConnection
 from app.db.repositories.user_repo import UserRepository
 from app.services.user_embedding_service import UserEmbeddingService
 from app.api.v1.auth import get_current_user  # NEW
+import re
 logger = get_logger(__name__)
 
 router = APIRouter()
@@ -214,6 +215,35 @@ async def register_user(
     )
     
     try:
+        # --- INPUT VALIDATION START ---
+        
+        # 1. Email Validation
+        # Basic regex pattern for email validation
+        email_regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        if not re.match(email_regex, user_data.email):
+             raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid email address format"
+            )
+
+        # 2. Password Validation
+        password = user_data.password
+        
+        # Check length (at least 8 characters)
+        if len(password) < 8:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must be at least 8 characters long"
+            )
+
+        # Check for at least 1 uppercase letter
+        if not any(char.isupper() for char in password):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Password must contain at least one uppercase letter"
+            )
+        # --- INPUT VALIDATION END ---
+
         # Check if user exists
         existing_user = await user_repo.find_by_email(user_data.email)
         
