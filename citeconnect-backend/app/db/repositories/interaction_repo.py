@@ -33,7 +33,8 @@ class InteractionRepository(BaseRepository):
         duration_seconds: Optional[int] = None,
         source: Optional[str] = None,
         position: Optional[int] = None,
-        session_id: Optional[str] = None
+        session_id: Optional[str] = None,
+        score_breakdown: Optional[Dict] = None
     ) -> asyncpg.Record:
         """
         Record a user-paper interaction.
@@ -54,7 +55,8 @@ class InteractionRepository(BaseRepository):
             context['position'] = position
         if session_id:
             context['session_id'] = session_id
-        
+        if score_breakdown:
+            context['score_breakdown'] = score_breakdown
         # Serialize to JSON string for PostgreSQL JSONB column
         import json
         context_json = json.dumps(context) if context else None

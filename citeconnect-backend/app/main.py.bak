@@ -1,3 +1,6 @@
+Here’s your updated **`app/main.py`** with the `RETRAIN_NEEDED` metric fully wired in (including `avg_combined` + `drift_score` tracking and the final flag logic):
+
+```python
 """
 CiteConnect Backend Application Entry Point.
 Initializes all services, loads models, and configures FastAPI.
@@ -712,7 +715,7 @@ async def debug_embedding_service():
 # -----------------------------------------------------------------------------
 # Routers
 # -----------------------------------------------------------------------------
-from app.api.v1 import graph, recommendations, users, papers, interactions, pubsub
+from app.api.v1 import graph, recommendations, users, papers, interactions
 
 app.include_router(
     graph.router, prefix=f"{settings.API_V1_PREFIX}/graph", tags=["graph"]
@@ -734,8 +737,6 @@ app.include_router(
     tags=["interactions"],
 )
 
-app.include_router(pubsub.router, prefix="/pubsub")
-
 
 # -----------------------------------------------------------------------------
 # Prometheus /metrics endpoint
@@ -756,6 +757,11 @@ async def metrics_endpoint():
 # -----------------------------------------------------------------------------
 if __name__ == "__main__":
     import uvicorn
+<<<<<<< HEAD
+    port = int(os.getenv("DEPLOYMENT_PORT", 8000))
+=======
+
+>>>>>>> de7e155 (Add monitoring, bias & drift metrics, and dashboard artifacts)
     uvicorn.run(
         "app.main:app",
         host="0.0.0.0",
@@ -763,3 +769,4 @@ if __name__ == "__main__":
         reload=settings.DEBUG,
         log_level=settings.LOG_LEVEL.lower(),
     )
+```

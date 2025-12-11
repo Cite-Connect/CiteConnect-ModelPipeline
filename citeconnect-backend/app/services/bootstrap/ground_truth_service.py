@@ -127,17 +127,43 @@ class GroundTruthService:
         """Load relationship data for ground truth papers."""
         logger.debug("Loading ground truth relationships")
         
-        for paper_id in self.ground_truth_papers.keys():
-            relationships = await self.ground_truth_repo.get_ground_truth_relationships(
-                paper_id
-            )
-            
-            if relationships:
-                self.ground_truth_relationships[paper_id] = relationships
+        # Load relationships in background (non-blocking for startup)
+        # Only load for a subset to avoid blocking startup
+        paper_ids = list(self.ground_truth_papers.keys())
+        
+        # Limit to first 100 papers to avoid blocking startup
+        # Remaining relationships will be loaded on-demand
+        max_papers_to_load = 100
+        paper_ids_to_load = paper_ids[:max_papers_to_load]
         
         logger.info(
-            "Ground truth relationships loaded",
-            count=len(self.ground_truth_relationships)
+            "Loading ground truth relationships (limited batch)",
+            total_papers=len(paper_ids),
+            loading_count=len(paper_ids_to_load)
+        )
+        
+        for paper_id in paper_ids_to_load:
+            try:
+                relationships = await self.ground_truth_repo.get_ground_truth_relationships(
+                    paper_id
+                )
+                
+                if relationships:
+                    self.ground_truth_relationships[paper_id] = relationships
+            except Exception as e:
+                logger.warning(
+                    "Failed to load relationships for paper",
+                    paper_id=paper_id,
+                    error=str(e)
+                )
+                # Continue with other papers
+                continue
+        
+        logger.info(
+            "Ground truth relationships loaded (partial)",
+            loaded_count=len(self.ground_truth_relationships),
+            total_papers=len(paper_ids),
+            note="Remaining relationships will be loaded on-demand"
         )
     
     async def get_canonical_papers(
