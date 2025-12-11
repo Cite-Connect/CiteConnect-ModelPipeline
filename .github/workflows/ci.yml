@@ -8,7 +8,7 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
-    continue-on-error: true  # Tests are non-blocking
+    # Tests are blocking - failures will stop the workflow
     
     strategy:
       matrix:
@@ -81,6 +81,28 @@ jobs:
         with:
           name: coverage-xml
           path: coverage.xml
+      
+      - name: Send Email Alert on Test Failure
+        if: failure()
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "🚨 Test Failures in CI: ${{ github.repository }}"
+          to: ${{ secrets.EMAIL_RECIPIENTS }}
+          from: ${{ secrets.SMTP_FROM }}
+          body: |
+            <h2>⚠️ Test Failures Detected</h2>
+            <p><strong>Repository:</strong> ${{ github.repository }}</p>
+            <p><strong>Branch:</strong> ${{ github.ref_name }}</p>
+            <p><strong>Commit:</strong> <code>${{ github.sha }}</code></p>
+            <p><strong>Workflow:</strong> ${{ github.workflow }}</p>
+            <p><strong>Run URL:</strong> <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Failed Tests</a></p>
+            <p>The test job has failed. Please check the workflow logs for details.</p>
+          content_type: text/html
+        continue-on-error: true  # Don't fail workflow if email fails
 
   bias-detection:
     runs-on: ubuntu-latest
@@ -385,3 +407,41 @@ jobs:
               repo: context.repo.repo,
               body: body
             });
+
+  notify-on-failure:
+    runs-on: ubuntu-latest
+    needs: [test, bias-detection]
+    if: failure()
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Send Email Notification
+        uses: dawidd6/action-send-mail@v3
+        with:
+          server_address: ${{ secrets.SMTP_SERVER }}
+          server_port: ${{ secrets.SMTP_PORT }}
+          username: ${{ secrets.SMTP_USERNAME }}
+          password: ${{ secrets.SMTP_PASSWORD }}
+          subject: "🚨 CI Workflow Failed: ${{ github.repository }}"
+          to: ${{ secrets.EMAIL_RECIPIENTS }}
+          from: ${{ secrets.SMTP_FROM }}
+          body: |
+            <h2>CI Workflow Failure Alert</h2>
+            <p><strong>Repository:</strong> ${{ github.repository }}</p>
+            <p><strong>Branch:</strong> ${{ github.ref_name }}</p>
+            <p><strong>Commit:</strong> <code>${{ github.sha }}</code></p>
+            <p><strong>Workflow:</strong> ${{ github.workflow }}</p>
+            <p><strong>Run ID:</strong> ${{ github.run_id }}</p>
+            <p><strong>Run URL:</strong> <a href="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}">View Workflow Run</a></p>
+            
+            <h3>Failed Jobs:</h3>
+            <ul>
+              <li><strong>Test Job:</strong> ${{ needs.test.result }}</li>
+              <li><strong>Bias Detection Job:</strong> ${{ needs.bias-detection.result }}</li>
+            </ul>
+            
+            <p>Please check the workflow logs for more details.</p>
+          content_type: text/html
+        continue-on-error: true  # Don't fail if email sending fails
