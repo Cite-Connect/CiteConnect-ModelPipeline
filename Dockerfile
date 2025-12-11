@@ -21,6 +21,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the contents of citeconnect-backend directly to /app (not as subdirectory)
 COPY citeconnect-backend/ .
 
+# Ensure bias config directories exist (configs are copied from CI artifacts via deploy.yml)
+# If configs don't exist, service will log warnings but continue to operate
+RUN mkdir -p /app/bias_config && \
+    echo "Bias mitigation configs will be loaded from:" && \
+    echo "  - /app/bias_config/bias_mitigation_config.json (user-profile mitigation)" && \
+    echo "  - /app/fairness_config.json (domain fairness)" && \
+    (ls -la /app/bias_config/ 2>/dev/null || echo "  ℹ️  bias_config/ empty (will use runtime defaults)") && \
+    (ls -la /app/fairness_config.json 2>/dev/null || echo "  ℹ️  fairness_config.json missing (will use runtime defaults)")
+
 # Set model cache environment variables
 ENV TRANSFORMERS_CACHE=/app/models
 ENV SENTENCE_TRANSFORMERS_HOME=/app/models
