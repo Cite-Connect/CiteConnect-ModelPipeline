@@ -472,12 +472,42 @@ class GraphService:
             'type': node_type,
         }
         
+        # if metadata:
+        #     node.update({
+        #         'year': paper.get('year'),
+        #         'citation_count': paper.get('citation_count', 0),
+        #         'domain': paper.get('domain'),
+        #         'authors': (paper.get('authors', []) or [])[:3],  # First 3 authors
+        #         'venue': paper.get('venue'),
+        #         'abstract': (paper.get('abstract') or '')[:200],  # Handle None, first 200 chars
+        #         # Visual properties based on type
+        #         'size': self._calculate_node_size(
+        #             paper.get('citation_count', 0),
+        #             node_type
+        #         ),
+        #         'color': self._get_node_color(node_type),
+        #     })
+        
         if metadata:
+            # Safely extract authors
+            authors_list = []
+            if paper.get('authors'):
+                raw_authors = paper['authors']
+                if isinstance(raw_authors, list) and len(raw_authors) > 0:
+                    # Authors is ["Name1, Name2, Name3"] format
+                    author_string = raw_authors[0]
+                    if author_string:
+                        # Split by comma and take first 3
+                        authors_list = [a.strip() for a in str(author_string).split(',')][:3]
+                elif isinstance(raw_authors, str):
+                    # Authors is "Name1, Name2, Name3" format
+                    authors_list = [a.strip() for a in raw_authors.split(',')][:3]
+            
             node.update({
                 'year': paper.get('year'),
                 'citation_count': paper.get('citation_count', 0),
                 'domain': paper.get('domain'),
-                'authors': paper.get('authors', [])[:3],  # First 3 authors
+                'authors': authors_list,  # Already processed
                 'venue': paper.get('venue'),
                 'abstract': (paper.get('abstract') or '')[:200],  # Handle None, first 200 chars
                 # Visual properties based on type
@@ -487,7 +517,7 @@ class GraphService:
                 ),
                 'color': self._get_node_color(node_type),
             })
-        
+
         return node
     
     def _calculate_node_size(

@@ -286,33 +286,221 @@ async def update_canonical_papers_for_new_papers(new_gt_count: int):
         raise
 
 
-async def compute_ground_truth_relationships_optimized():
+async def compute_ground_truth_relationships_incremental():
     """
-    Skips - table exists but not implemented yet.
+    Compute citation relationships for NEW ground truth papers only.
+    FIXED: No unnest() in HAVING clause - restructured queries.
     """
-    logger.info("Computing ground truth relationships (skipped - table not in schema)")
+    logger.info("Computing ground truth relationships (incremental)")
     
-    check_query = """
-        SELECT EXISTS (
-            SELECT FROM information_schema.tables 
-            WHERE table_schema = 'public' 
-            AND table_name = 'ground_truth_relationships'
+    try:
+        # Only get ground truth papers that DON'T have relationships yet
+        papers_query = """
+            SELECT gtp.paper_id, gtp.domain
+            FROM ground_truth_papers gtp
+            LEFT JOIN ground_truth_relationships gtr ON gtp.paper_id = gtr.paper_id
+            WHERE gtr.paper_id IS NULL
+        """
+        
+        papers_to_process = await db.fetch(papers_query)
+        
+        if not papers_to_process:
+            logger.info("No new ground truth papers need relationship computation")
+            return 0
+        
+        logger.info(
+            "Processing relationships for new papers",
+            count=len(papers_to_process)
         )
-    """
-    
-    table_exists = await db.fetchval(check_query)
-    
-    if not table_exists:
-        logger.warning("ground_truth_relationships table does not exist, skipping")
-        return
-    
-    logger.info("ground_truth_relationships table exists, but implementation needs schema")
-    return
-
+        
+        processed_count = 0
+        
+        for gt_paper in papers_to_process:
+            paper_id = gt_paper['paper_id']
+            
+            try:
+                # Get paper's reference_ids and citation info
+                paper_data_query = """
+                    SELECT 
+                        reference_ids,
+                        citation_ids,
+                        array_length(citation_ids, 1) as citation_count
+                    FROM papers
+                    WHERE paper_id = $1
+                """
+                
+                paper_data = await db.fetchrow(paper_data_query, paper_id)
+                
+                if not paper_data:
+                    logger.warning(f"Paper data not found for {paper_id}")
+                    continue
+                
+                # Extract citation network (papers that cite this paper)
+                citation_network = paper_data['citation_ids'] or []
+                citation_network_size = len(citation_network)
+                
+                # Find co-cited papers - FIXED QUERY
+                co_cited_query = """
+                    WITH citers AS (
+                        SELECT unnest($1::text[]) as citing_paper
+                    ),
+                    ref_expansions AS (
+                        SELECT 
+                            p.paper_id as citing_paper,
+                            unnest(p.reference_ids) as co_cited_paper
+                        FROM papers p
+                        WHERE p.paper_id IN (SELECT citing_paper FROM citers)
+                          AND p.reference_ids IS NOT NULL
+                    ),
+                    co_citation_counts AS (
+                        SELECT 
+                            co_cited_paper,
+                            COUNT(*) as strength
+                        FROM ref_expansions
+                        WHERE co_cited_paper != $2
+                        GROUP BY co_cited_paper
+                        HAVING COUNT(*) >= 2
+                    )
+                    SELECT 
+                        co_cited_paper,
+                        strength
+                    FROM co_citation_counts
+                    ORDER BY strength DESC
+                    LIMIT 50
+                """
+                
+                co_cited_results = await db.fetch(co_cited_query, citation_network, paper_id)
+                co_cited_papers = [r['co_cited_paper'] for r in co_cited_results]
+                co_citation_strengths = [float(r['strength']) for r in co_cited_results]
+                
+                # Find bibliographic couples - FIXED QUERY
+                references = paper_data['reference_ids'] or []
+                
+                if references:
+                    bib_couple_query = """
+                        WITH this_paper_refs AS (
+                            SELECT unnest($1::text[]) as ref_paper
+                        ),
+                        ref_expansions AS (
+                            SELECT 
+                                p.paper_id as couple_paper,
+                                unnest(p.reference_ids) as ref
+                            FROM papers p
+                            WHERE p.reference_ids IS NOT NULL
+                              AND p.paper_id != $2
+                        ),
+                        shared_ref_counts AS (
+                            SELECT 
+                                couple_paper,
+                                COUNT(*) as strength
+                            FROM ref_expansions
+                            WHERE ref IN (SELECT ref_paper FROM this_paper_refs)
+                            GROUP BY couple_paper
+                            HAVING COUNT(*) >= 2
+                        )
+                        SELECT 
+                            couple_paper,
+                            strength
+                        FROM shared_ref_counts
+                        ORDER BY strength DESC
+                        LIMIT 50
+                    """
+                    
+                    bib_couple_results = await db.fetch(bib_couple_query, references, paper_id)
+                    bib_couples = [r['couple_paper'] for r in bib_couple_results]
+                    coupling_strengths = [float(r['strength']) for r in bib_couple_results]
+                else:
+                    bib_couples = []
+                    coupling_strengths = []
+                
+                # Calculate network centrality
+                network_centrality = min(citation_network_size / 100.0, 1.0)
+                
+                # Calculate relationship quality score
+                network_score = min(citation_network_size / 50.0, 1.0)
+                co_citation_score = min(len(co_cited_papers) / 30.0, 1.0)
+                coupling_score = min(len(bib_couples) / 30.0, 1.0)
+                
+                relationship_quality = (
+                    network_score * 0.4 +
+                    co_citation_score * 0.3 +
+                    coupling_score * 0.3
+                )
+                
+                # Insert relationship data
+                insert_query = """
+                    INSERT INTO ground_truth_relationships (
+                        paper_id,
+                        citation_network,
+                        citation_network_size,
+                        co_cited_papers,
+                        co_citation_strengths,
+                        bibliographic_couples,
+                        coupling_strengths,
+                        relationship_quality_score,
+                        network_centrality
+                    )
+                    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+                    ON CONFLICT (paper_id) DO UPDATE SET
+                        citation_network = EXCLUDED.citation_network,
+                        citation_network_size = EXCLUDED.citation_network_size,
+                        co_cited_papers = EXCLUDED.co_cited_papers,
+                        co_citation_strengths = EXCLUDED.co_citation_strengths,
+                        bibliographic_couples = EXCLUDED.bibliographic_couples,
+                        coupling_strengths = EXCLUDED.coupling_strengths,
+                        relationship_quality_score = EXCLUDED.relationship_quality_score,
+                        network_centrality = EXCLUDED.network_centrality,
+                        last_updated = CURRENT_TIMESTAMP
+                """
+                
+                await db.execute(
+                    insert_query,
+                    paper_id,
+                    citation_network[:100],
+                    citation_network_size,
+                    co_cited_papers,
+                    co_citation_strengths,
+                    bib_couples,
+                    coupling_strengths,
+                    relationship_quality,
+                    network_centrality
+                )
+                
+                processed_count += 1
+                
+                # Log progress every 20 papers
+                if processed_count % 20 == 0:
+                    logger.info(
+                        f"Relationship computation progress: {processed_count}/{len(papers_to_process)}"
+                    )
+                    
+            except Exception as e:
+                logger.error(
+                    "Failed to compute relationships for paper",
+                    paper_id=paper_id,
+                    error=str(e)
+                )
+                # Continue with next paper instead of failing entire process
+                continue
+        
+        logger.info(
+            "Ground truth relationships computed",
+            count=processed_count
+        )
+        
+        return processed_count
+        
+    except Exception as e:
+        logger.error(
+            "Error computing ground truth relationships",
+            error=str(e),
+            exc_info=True
+        )
+        raise
 
 # Export functions with same names for compatibility
 identify_ground_truth_papers = identify_ground_truth_papers_incremental
-compute_ground_truth_relationships = compute_ground_truth_relationships_optimized
+compute_ground_truth_relationships = compute_ground_truth_relationships_incremental
 
 # Wrapper for identify_canonical_papers to match expected signature
 async def identify_canonical_papers(new_gt_count: int = 0):
