@@ -11,6 +11,10 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ============================================
+  # TODO: Re-enable unit tests
+  # Uncomment the test job below and the "needs: test" line in bias-detection
+  # ============================================
   # test:
   #   runs-on: ubuntu-latest
   #   continue-on-error: true  # Tests are non-blocking
@@ -89,10 +93,9 @@ jobs:
 
   bias-detection:
     runs-on: ubuntu-latest
-    needs: test
-    # DEPLOYMENT BLOCKING: Set to false to block deployment on critical bias
+    # needs: test  # TODO: Uncomment when test job is re-enabled
     continue-on-error: false
-
+    
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
