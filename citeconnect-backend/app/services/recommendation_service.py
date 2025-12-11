@@ -661,7 +661,7 @@ class RecommendationService:
             paper['final_score'] = base_score * (1.0 + multi_source_boost)
             
             # Store breakdown for explainability
-            paper[' '] = {
+            paper['score_breakdown'] = {
                 'keyword': keyword_score,
                 'semantic': semantic_score,
                 'profile': profile_score,
