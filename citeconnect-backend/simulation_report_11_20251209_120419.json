@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251209-120245",
+  "user_id": 11,
+  "timestamp": "2025-12-09T12:04:19.286165",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "3b524815bcd9089c0fd367ccd9439ab9fbeeee35",
+      "title": "A Survey on Quantum Machine Learning: Current Trends, Challenges, Opportunities, and the Road Ahead",
+      "relevance_score": 0.693
+    },
+    {
+      "paper_id": "bc0bc76d8627332049181d85528415ed6f8d18fe",
+      "title": "Quantum Machine Learning for Next-G Wireless Communications: Fundamentals and the Path Ahead",
+      "relevance_score": 0.669
+    },
+    {
+      "paper_id": "d421b8a464227c201c149299d10812b10495522f",
+      "title": "Quantum Machine Learning: Exploring the Role of Data Encoding Techniques, Challenges, and Future Directions",
+      "relevance_score": 0.664
+    },
+    {
+      "paper_id": "96ed4aafa7d1bb8d4f23dac435e8632437ee5bc8",
+      "title": "Quantum Machine Learning: A tutorial",
+      "relevance_score": 0.663
+    },
+    {
+      "paper_id": "3fd2dc485f7231278b3dc12f3109978880a44fc1",
+      "title": "Quantum Machine Learning on Near-Term Quantum Devices: Current State of Supervised and Unsupervised Techniques for Real-World Applications",
+      "relevance_score": 0.663
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "8ae983d8dfc414c2453ab657de8aa10b399c889a",
+      "title": "Quantum Machine Learning and Recent Advancements",
+      "relevance_score": 0.399
+    },
+    {
+      "paper_id": "7c07040861355cb5ff1a336dbfd3711477e2f5c0",
+      "title": "Quantum Machine Learning Applications in the Biomedical Domain: A Systematic Review",
+      "relevance_score": 0.393
+    },
+    {
+      "paper_id": "4a2a039da554f5132b0e8218e06b18199b16b32d",
+      "title": "Key questions for the quantum machine learner to ask themselves",
+      "relevance_score": 0.392
+    },
+    {
+      "paper_id": "c88edaa3f9527f2ec8e41baa7ad320169aee7c6e",
+      "title": "Benefits of Open Quantum Systems for Quantum Machine Learning",
+      "relevance_score": 0.391
+    },
+    {
+      "paper_id": "622ea3d70049578ecbc24f007da1e9c47457862b",
+      "title": "Quantum Computing and Quantum Machine Learning Classification \u2013 A Survey",
+      "relevance_score": 0.388
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "3b524815bcd9089c0fd367ccd9439ab9fbeeee35",
+      "paper_title": "A Survey on Quantum Machine Learning: Current Trends, Challe...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:03:59.939554"
+    },
+    {
+      "number": 2,
+      "paper_id": "bc0bc76d8627332049181d85528415ed6f8d18fe",
+      "paper_title": "Quantum Machine Learning for Next-G Wireless Communications:...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:04:00.999463"
+    },
+    {
+      "number": 3,
+      "paper_id": "d421b8a464227c201c149299d10812b10495522f",
+      "paper_title": "Quantum Machine Learning: Exploring the Role of Data Encodin...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T12:04:02.082335"
+    },
+    {
+      "number": 4,
+      "paper_id": "96ed4aafa7d1bb8d4f23dac435e8632437ee5bc8",
+      "paper_title": "Quantum Machine Learning: A tutorial...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:04:03.276612"
+    },
+    {
+      "number": 5,
+      "paper_id": "3fd2dc485f7231278b3dc12f3109978880a44fc1",
+      "paper_title": "Quantum Machine Learning on Near-Term Quantum Devices: Curre...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:04:04.423776"
+    },
+    {
+      "number": 6,
+      "paper_id": "f15a5787bf2e1550fe00f13e07a0b04a6f2b617b",
+      "paper_title": "Quantum Machine Learning for Computational Methods in Engine...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:04:05.549154"
+    },
+    {
+      "number": 7,
+      "paper_id": "13c80dcfc4d3537540937359990e517aafe79fd7",
+      "paper_title": "A comprehensive review of quantum machine learning: from NIS...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T12:04:06.716637"
+    },
+    {
+      "number": 8,
+      "paper_id": "fce88146673049269135617d162ffb2acffba5d1",
+      "paper_title": "Quantum machine learning: from physics to software engineeri...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:04:07.920506"
+    },
+    {
+      "number": 9,
+      "paper_id": "f84e0c0bd175cac32855329a7f7e1101e2a63d8d",
+      "paper_title": "Enhancing quantum support vector machines through variationa...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T12:04:09.441354"
+    },
+    {
+      "number": 10,
+      "paper_id": "d29dbd7034613eff57ae2fedf276fd977438c81e",
+      "paper_title": "Quantum Machine Learning\u2014An Overview...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T12:04:10.543933"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 11,
+        "username": "synthetic_ug_quantum@seed.local",
+        "interaction_count": 0,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-11-30T01:06:12.140929",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "qml",
+          "quantum algorithms",
+          "quantum basics"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 11,
+        "username": "synthetic_ug_quantum@seed.local",
+        "interaction_count": 10,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T17:04:09.075738",
+        "primary_domain": "quantum_computing",
+        "interests": [
+          "qml",
+          "quantum algorithms",
+          "quantum basics"
+        ]
+      }
+    }
+  ]
+}

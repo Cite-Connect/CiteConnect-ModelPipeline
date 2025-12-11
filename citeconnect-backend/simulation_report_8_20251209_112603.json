@@ -1,0 +1,177 @@
+{
+  "simulation_id": "simulation-20251209-112438",
+  "user_id": 8,
+  "timestamp": "2025-12-09T11:26:03.296163",
+  "interaction_profile": "engaged_user",
+  "total_interactions": 10,
+  "cold_start_recommendations": [
+    {
+      "paper_id": "029f0432d31665b8f211b01dc91bc59419a1f23e",
+      "title": "Classification and prediction of diabetes disease using machine learning paradigm",
+      "relevance_score": 0.746
+    },
+    {
+      "paper_id": "77ab2dead2357e9ffa97418b36fd663c04a3a2fc",
+      "title": "Predicting Heart Disease at Early Stages using Machine Learning: A Survey",
+      "relevance_score": 0.74
+    },
+    {
+      "paper_id": "3f217e5faf34498df5f90ceb081652c2d934cb0b",
+      "title": "A review of the application of deep learning in medical image classification and segmentation",
+      "relevance_score": 0.736
+    },
+    {
+      "paper_id": "8fa608859d3e7b58a1565c9fcd4968eadfc591cb",
+      "title": "A decision support system for heart disease prediction based upon machine learning",
+      "relevance_score": 0.734
+    },
+    {
+      "paper_id": "5ff2880e870b3b71b4518148d6d3dd5453ccf923",
+      "title": "Effective heart disease prediction using hybrid machine learning techniques",
+      "relevance_score": 0.729
+    }
+  ],
+  "warm_start_recommendations": [
+    {
+      "paper_id": "8943c9dfadc5bb3840015aa13b2c644be005ed5c",
+      "title": "Machine Learning Based Cardiovascular Disease Prediction",
+      "relevance_score": 0.339
+    },
+    {
+      "paper_id": "8ad2eee1be047ccb524c8f8b6971186f1ab184c9",
+      "title": "Heart disease prediction using machine learning techniques",
+      "relevance_score": 0.335
+    },
+    {
+      "paper_id": "f09a8d06b9ba33a5c8c4fd0e1ee268a60a89d0a5",
+      "title": "Clinical Data Analysis for Prediction of Cardiovascular Disease Using Machine Learning Techniques",
+      "relevance_score": 0.333
+    },
+    {
+      "paper_id": "17f509eb182118cac5f285527f5b1009026a79fb",
+      "title": "Overview of Machine Learning: Part 2: Deep Learning for Medical Image Analysis.",
+      "relevance_score": 0.331
+    },
+    {
+      "paper_id": "ec226f59f701457abe7c6f05642382e6d49287bb",
+      "title": "Heart disease classification using optimized Machine learning algorithms",
+      "relevance_score": 0.328
+    }
+  ],
+  "interactions": [
+    {
+      "number": 1,
+      "paper_id": "029f0432d31665b8f211b01dc91bc59419a1f23e",
+      "paper_title": "Classification and prediction of diabetes disease using mach...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T11:25:39.363084"
+    },
+    {
+      "number": 2,
+      "paper_id": "77ab2dead2357e9ffa97418b36fd663c04a3a2fc",
+      "paper_title": "Predicting Heart Disease at Early Stages using Machine Learn...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T11:25:40.443597"
+    },
+    {
+      "number": 3,
+      "paper_id": "3f217e5faf34498df5f90ceb081652c2d934cb0b",
+      "paper_title": "A review of the application of deep learning in medical imag...",
+      "type": "click",
+      "strength": 0.3,
+      "timestamp": "2025-12-09T11:25:41.528161"
+    },
+    {
+      "number": 4,
+      "paper_id": "8fa608859d3e7b58a1565c9fcd4968eadfc591cb",
+      "paper_title": "A decision support system for heart disease prediction based...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T11:25:42.763907"
+    },
+    {
+      "number": 5,
+      "paper_id": "5ff2880e870b3b71b4518148d6d3dd5453ccf923",
+      "paper_title": "Effective heart disease prediction using hybrid machine lear...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T11:25:43.945704"
+    },
+    {
+      "number": 6,
+      "paper_id": "9ea3560c62ec3d274ea88fad3cab592831351472",
+      "paper_title": "Machine Learning Techniques for Heart Disease Prediction: A ...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T11:25:45.144245"
+    },
+    {
+      "number": 7,
+      "paper_id": "e72b411615a83da9a971efbae765a9455ce38d0f",
+      "paper_title": "A comparative study of classification and prediction of Card...",
+      "type": "save",
+      "strength": 0.8,
+      "timestamp": "2025-12-09T11:25:46.375926"
+    },
+    {
+      "number": 8,
+      "paper_id": "db6ad6ded1cfa26fdc7437f27fb823ec533e96fe",
+      "paper_title": "Deep Learning: A Comprehensive Overview on Techniques, Taxon...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T11:25:47.570284"
+    },
+    {
+      "number": 9,
+      "paper_id": "6ac88a018062fa368e15494e915ec1b597b3526c",
+      "paper_title": "Challenges and opportunities beyond structured data in analy...",
+      "type": "like",
+      "strength": 0.6,
+      "timestamp": "2025-12-09T11:25:48.891799"
+    },
+    {
+      "number": 10,
+      "paper_id": "b6541522be6ab0d65f0ffe6cde46ad727c633e99",
+      "paper_title": "CAD and AI for breast cancer - Recent Development and Challe...",
+      "type": "download",
+      "strength": 0.7,
+      "timestamp": "2025-12-09T11:25:49.960517"
+    }
+  ],
+  "database_snapshots": [
+    {
+      "snapshot_type": "initial",
+      "data": {
+        "user_id": 8,
+        "username": "industry.researcher@test.com",
+        "interaction_count": 0,
+        "recommendation_stage": "cold_start",
+        "last_embedding_update": "2025-11-29T21:28:37.930225",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "image recognition",
+          "machine learning"
+        ]
+      }
+    },
+    {
+      "snapshot_type": "after_interactions",
+      "data": {
+        "user_id": 8,
+        "username": "industry.researcher@test.com",
+        "interaction_count": 10,
+        "recommendation_stage": "early",
+        "last_embedding_update": "2025-12-09T16:25:48.615095",
+        "primary_domain": "healthcare",
+        "interests": [
+          "computer vision",
+          "image recognition",
+          "machine learning"
+        ]
+      }
+    }
+  ]
+}

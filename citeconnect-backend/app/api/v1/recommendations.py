@@ -86,7 +86,8 @@ async def get_recommendations(
         # Map model names
         model_map = {
             'minilm': 'all-MiniLM-L6-v2',
-            'specter': 'specter2'
+            'specter2': 'specter',
+            'specter': 'specter'
         }
         model_name = model_map.get(request_data.model_preference, request_data.model_preference)
 
@@ -131,7 +132,29 @@ async def get_recommendations(
                 }
             }
         )
+@router.post(
+    "/test",
+    response_model=RecommendationResponse,
+    summary="Test recommendations (no auth)",
+    description="For testing/simulations only - bypasses authentication"
+)
+async def get_recommendations_test(
+    request_data: RecommendationRequest,
+    orchestrator: RecommendationOrchestrator = Depends(get_recommendation_orchestrator)
+):
+    """Generate recommendations without authentication (testing only)."""
+    model_map = {'minilm': 'all-MiniLM-L6-v2', 'specter': 'specter', 'specter2': 'specter'}
+    model_name = model_map.get(request_data.model_preference, request_data.model_preference)
 
+    result = await orchestrator.generate_recommendations(
+        user_id=request_data.user_id,
+        model_name=model_name,
+        count=request_data.count,
+        search_query=request_data.search_query,
+        filters=request_data.filters.dict() if request_data.filters else None
+    )
+    
+    return result
 
 @router.get(
     "/{user_id}/history",
@@ -146,7 +169,7 @@ async def get_recommendation_history(
 ):
     """
     Get user's recommendation history.
-    User can only view their own history.
+    Uses InteractionRepository - NO SQL HERE.
     """
     
     # Verify user is accessing their own history
@@ -168,21 +191,14 @@ async def get_recommendation_history(
     )
     
     try:
-        query = """
-           SELECT 
-                re.event_id,
-                re.recommended_paper_ids,
-                re.embedding_model,
-                re.event_timestamp
-            FROM recommendation_events re
-            WHERE re.user_id = $1
-            ORDER BY re.event_timestamp DESC
-            LIMIT $2
-        """
+        from app.db.repositories.interaction_repo import InteractionRepository
+        interaction_repo = InteractionRepository(db)
         
-        logger.info("Executing history query", user_id=user_id)
-        results = await db.fetch(query, user_id, limit)
-        logger.info("History query complete", result_count=len(results))
+        # Use repository method instead of direct SQL
+        history_results = await interaction_repo.get_recommendation_history(
+            user_id=user_id,
+            limit=limit
+        )
         
         history = [
             {
@@ -191,7 +207,7 @@ async def get_recommendation_history(
                 "model": row['embedding_model'],
                 "timestamp": row['event_timestamp'].isoformat()
             }
-            for row in results
+            for row in history_results
         ]
         
         return {
@@ -211,7 +227,6 @@ async def get_recommendation_history(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to retrieve recommendation history"
         )
-
 
 @router.post(
     "/evaluate",
@@ -263,7 +278,7 @@ async def evaluate_recommendations(
         evaluation_result = await eval_service.evaluate_cold_start_recommendations(
             user_id=user_id,
             recommendations=recommendations,
-            store_result=False 
+            store_result=True 
         )
         
         return {
