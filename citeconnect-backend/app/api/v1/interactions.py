@@ -115,7 +115,8 @@ async def track_interaction(
             duration_seconds=interaction_data.duration_seconds,
             source=interaction_data.context.source if interaction_data.context else None,
             position=interaction_data.context.position if interaction_data.context else None,
-            session_id=interaction_data.context.session_id if interaction_data.context else None
+            session_id=interaction_data.context.session_id if interaction_data.context else None,
+            score_breakdown=interaction_data.context.score_breakdown if interaction_data.context else None
         )
         
         logger.info(
