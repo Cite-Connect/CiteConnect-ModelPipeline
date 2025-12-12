@@ -146,7 +146,6 @@ jobs:
 
           echo "Updated model drift detection results in database and dashboard..."
 
-      - name: Analyze Model Drift Results & Block if Critical
 
   bias-detection:
     runs-on: ubuntu-latest
