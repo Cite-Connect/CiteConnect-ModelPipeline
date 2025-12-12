@@ -195,6 +195,7 @@ class InteractionContext(BaseModel):
     source: str = Field(..., description="Where interaction happened")
     position: Optional[int] = Field(None, ge=0, description="Position in list")
     session_id: str
+    score_breakdown: Optional[Dict] = None
     
     @validator('source')
     def validate_source(cls, v):
