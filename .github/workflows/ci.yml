@@ -3,6 +3,8 @@ name: Unit & Integration Tests
 on:
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: '0 */2 * * *'  # Daily at midnight
   workflow_dispatch:
 
 jobs:
