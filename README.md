@@ -829,14 +829,6 @@ Additional documentation:
 - **Deployment Guide**: `documentation_backend_root/citeconnect_deployment_guide.txt`
 - **Testing Guide**: `documentation_backend_root/citeconnect_testing_guide.txt`
 
-## License
-
-[Add your license information here]
-
-## Contributing
-
-[Add contributing guidelines here]
-
 ## Support
 
 For issues and questions, please open an issue on the repository.
