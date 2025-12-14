@@ -1,6 +1,6 @@
 # CiteConnect Backend
 
-AI-powered academic paper recommendation system with advanced ML capabilities, citation network analysis, and personalized user experiences.
+AI-powered academic paper recommendation system with advanced ML capabilities, citation network analysis, and personalized user experiences. Spotify for Researchers!!
 
 ## Table of Contents
 
